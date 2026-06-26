@@ -42,15 +42,13 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      - name: Remove duplicate MainActivity
-        run: rm -rf android/app/src/main/kotlin/ci/oyopmt/vigiroutes/vigiroutes_client
+      - name: Show all plugins
+        run: flutter pub deps --style=list | head -50
 
-      - name: Check v1 embedding plugins
+      - name: Check GeneratedPluginRegistrant
         run: |
-          flutter build apk --release --verbose > /tmp/build_log.txt 2>&1 || true
-          grep -i "deprecated\|v1\|plugin" /tmp/build_log.txt | head -20 || echo "No matches found"
-        env:
-          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+          find . -name "GeneratedPluginRegistrant.java" -o -name "GeneratedPluginRegistrant.kt" 2>/dev/null | head -5
+          cat android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java 2>/dev/null || echo "File not found"
 
       - name: Build APK Release
         run: flutter build apk --release
