@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:location/location.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/location_service.dart';
@@ -31,8 +30,8 @@ const _serviceEmojis = {
 };
 
 class HomeController extends ChangeNotifier {
-  final _api      = ApiService.instance;
-  final _location = LocationService();
+  final _api       = ApiService.instance;
+  final _location  = LocationService();
   final _stService = ServiceTypeService.instance;
 
   LatLng?             _userPosition;
@@ -43,15 +42,15 @@ class HomeController extends ChangeNotifier {
   String?             _error;
   Timer?              _refreshTimer;
 
-  LatLng?                get userPosition  => _userPosition;
-  List<ProviderModel>    get providers     => _providers;
-  Set<Marker>            get markers       => _markers;
-  String?                get serviceFilter => _serviceFilter;
+  LatLng?                get userPosition        => _userPosition;
+  List<ProviderModel>    get providers           => _providers;
+  Set<Marker>            get markers             => _markers;
+  String?                get serviceFilter       => _serviceFilter;
   String?                get selectedServiceFilter => _serviceFilter;
-  bool                   get isLoading     => _isLoading;
-  String?                get error         => _error;
-  List<ServiceTypeModel> get serviceTypes  => _stService.serviceTypes;
-  bool                   get servicesLoading => _stService.isLoading;
+  bool                   get isLoading           => _isLoading;
+  String?                get error               => _error;
+  List<ServiceTypeModel> get serviceTypes        => _stService.serviceTypes;
+  bool                   get servicesLoading     => _stService.isLoading;
 
   Future<void> initialize() async {
     _isLoading = true;
@@ -68,14 +67,12 @@ class HomeController extends ChangeNotifier {
       return;
     }
 
-    _userPosition = LatLng(pos.latitude!, pos.longitude!);
+    _userPosition = LatLng(pos.latitude, pos.longitude);
     _isLoading    = false;
     notifyListeners();
 
     await _loadProviders();
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 30), (_) => _loadProviders(),
-    );
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadProviders());
   }
 
   void setServiceFilter(String? id) {
@@ -92,19 +89,17 @@ class HomeController extends ChangeNotifier {
         longitude:     _userPosition!.longitude,
         serviceTypeId: _serviceFilter,
       );
-      _providers = data
-          .map((e) => ProviderModel.fromJson(e as Map<String, dynamic>))
-          .toList();
+      _providers = data.map((e) => ProviderModel.fromJson(e as Map<String, dynamic>)).toList();
       await _buildMarkers();
     } catch (e) {
       debugPrint('[HomeController] $e');
     }
   }
 
-  String _resolveSlug(String serviceTypeIdOrSlug) {
-    final byId = _stService.findById(serviceTypeIdOrSlug);
-    if (byId != null) return byId.slug;
-    final bySlug = _stService.findBySlug(serviceTypeIdOrSlug);
+  String _resolveSlug(String id) {
+    final byId   = _stService.findById(id);
+    if (byId   != null) return byId.slug;
+    final bySlug = _stService.findBySlug(id);
     if (bySlug != null) return bySlug.slug;
     return 'other';
   }
@@ -113,30 +108,25 @@ class HomeController extends ChangeNotifier {
     final markers = <Marker>{};
 
     if (_userPosition != null) {
-      final clientIcon = await _getCachedIcon('__client__', null);
+      final icon = await _getCachedIcon('__client__', null);
       markers.add(Marker(
-        markerId: const MarkerId('__client__'),
-        position: _userPosition!,
-        icon:     clientIcon,
+        markerId:  const MarkerId('__client__'),
+        position:  _userPosition!,
+        icon:      icon,
         infoWindow: const InfoWindow(title: '📍 Votre position'),
-        zIndex: 2,
+        zIndex:    2,
       ));
     }
 
     for (final p in _providers) {
-      final rawType = p.serviceTypes.isNotEmpty ? p.serviceTypes.first : 'other';
-      final slug    = _resolveSlug(rawType);
-      final icon    = await _getCachedIcon(p.id, slug);
-      final dist    = p.distanceKm != null
-          ? ' · ${p.distanceKm!.toStringAsFixed(1)} km' : '';
+      final slug = _resolveSlug(p.serviceTypes.isNotEmpty ? p.serviceTypes.first : 'other');
+      final icon = await _getCachedIcon(p.id, slug);
+      final dist = p.distanceKm != null ? ' · ${p.distanceKm!.toStringAsFixed(1)} km' : '';
       markers.add(Marker(
-        markerId: MarkerId(p.id),
-        position: LatLng(p.latitude, p.longitude),
-        icon:     icon,
-        infoWindow: InfoWindow(
-          title:   '🟢 ${p.name}',
-          snippet: '${p.rating.toStringAsFixed(1)}★$dist',
-        ),
+        markerId:  MarkerId(p.id),
+        position:  LatLng(p.latitude, p.longitude),
+        icon:      icon,
+        infoWindow: InfoWindow(title: '🟢 ${p.name}', snippet: '${p.rating.toStringAsFixed(1)}★$dist'),
       ));
     }
 
@@ -148,9 +138,7 @@ class HomeController extends ChangeNotifier {
 
   Future<BitmapDescriptor> _getCachedIcon(String id, String? slug) async {
     if (_iconCache.containsKey(id)) return _iconCache[id]!;
-    final icon = id == '__client__'
-        ? await _buildClientMarker()
-        : await _buildProviderMarker(slug ?? 'other');
+    final icon = id == '__client__' ? await _buildClientMarker() : await _buildProviderMarker(slug ?? 'other');
     _iconCache[id] = icon;
     return icon;
   }
@@ -165,11 +153,10 @@ class HomeController extends ChangeNotifier {
     canvas.drawCircle(const Offset(size/2,size/2-4),28,Paint()..color=color);
     canvas.drawCircle(const Offset(size/2,size/2-4),28,Paint()..color=Colors.white..style=PaintingStyle.stroke..strokeWidth=4);
     final path = Path()..moveTo(size/2-8,size/2+22)..lineTo(size/2,size/2+42)..lineTo(size/2+8,size/2+22)..close();
-    canvas.drawPath(path, Paint()..color=color);
+    canvas.drawPath(path,Paint()..color=color);
     final tp = TextPainter(text:const TextSpan(text:'👤',style:TextStyle(fontSize:22)),textDirection:TextDirection.ltr)..layout();
     tp.paint(canvas,Offset(size/2-tp.width/2,size/2-4-tp.height/2));
-    final pic   = rec.endRecording();
-    final img   = await pic.toImage(size.toInt(),(size+10).toInt());
+    final img   = await rec.endRecording().toImage(size.toInt(),(size+10).toInt());
     final bytes = await img.toByteData(format:ui.ImageByteFormat.png);
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(),width:44,height:50);
   }
@@ -189,12 +176,11 @@ class HomeController extends ChangeNotifier {
     final path = Path()..moveTo(size/2-8,size/2+22)..lineTo(size/2,size/2+42)..lineTo(size/2+8,size/2+22)..close();
     canvas.drawPath(path,Paint()..color=color);
     final emoji = _serviceEmojis[slug]??'🛠️';
-    final tp = TextPainter(text:TextSpan(text:emoji,style:const TextStyle(fontSize:22,color:Colors.white)),textDirection:TextDirection.ltr)..layout();
+    final tp = TextPainter(text:TextSpan(text:emoji,style:const TextStyle(fontSize:22)),textDirection:TextDirection.ltr)..layout();
     tp.paint(canvas,Offset(size/2-tp.width/2,size/2-4-tp.height/2));
     canvas.drawCircle(Offset(size/2+20,size/2-24),8,Paint()..color=Colors.green.shade400);
     canvas.drawCircle(Offset(size/2+20,size/2-24),8,Paint()..color=Colors.white..style=PaintingStyle.stroke..strokeWidth=2);
-    final pic   = rec.endRecording();
-    final img   = await pic.toImage(size.toInt(),(size+10).toInt());
+    final img   = await rec.endRecording().toImage(size.toInt(),(size+10).toInt());
     final bytes = await img.toByteData(format:ui.ImageByteFormat.png);
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(),width:40,height:45);
   }
