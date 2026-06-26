@@ -1,0 +1,209 @@
+import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class ApiService {
+  ApiService._();
+  static final ApiService instance = ApiService._();
+
+  static const _base = 'https://api.vigiroutes.com/api';
+  late final Dio _dio;
+  VoidCallback? onUnauthorized;
+
+  void init() {
+    _dio = Dio(BaseOptions(
+      baseUrl:        _base,
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
+      headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
+    ));
+
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        final prefs = await SharedPreferences.getInstance();
+        String? token;
+
+        if (options.path.startsWith('/user/')) {
+          // Routes user → token Firebase ID
+          try {
+            final u = fb.FirebaseAuth.instance.currentUser;
+            if (u != null) {
+              token = await u.getIdToken(false);
+              await prefs.setString('firebase_token', token!);
+            } else {
+              token = prefs.getString('firebase_token');
+            }
+          } catch (_) {
+            token = prefs.getString('firebase_token');
+          }
+        } else {
+          // Autres routes → token Sanctum
+          token = prefs.getString('sanctum_token');
+        }
+
+        if (token != null) options.headers['Authorization'] = 'Bearer $token';
+        if (kDebugMode) debugPrint('[API] ${options.method} ${options.path}');
+        handler.next(options);
+      },
+      onError: (err, handler) {
+        if (err.response?.statusCode == 401 &&
+            !err.requestOptions.path.contains('/auth/')) {
+          onUnauthorized?.call();
+        }
+        handler.next(err);
+      },
+    ));
+  }
+
+  // ── Token ─────────────────────────────────────────────────────────────────
+  Future<void> saveToken(String token) async =>
+      (await SharedPreferences.getInstance()).setString('sanctum_token', token);
+
+  Future<void> clearToken() async {
+    final p = await SharedPreferences.getInstance();
+    await p.remove('sanctum_token');
+    await p.remove('firebase_token');
+  }
+
+  Future<bool> get hasToken async =>
+      (await SharedPreferences.getInstance()).containsKey('sanctum_token');
+
+  // ── HTTP ──────────────────────────────────────────────────────────────────
+  Future<Response> get(String path, {Map<String, dynamic>? params}) =>
+      _dio.get(path, queryParameters: params);
+  Future<Response> post(String path, {dynamic data}) => _dio.post(path, data: data);
+  Future<Response> patch(String path, {dynamic data}) => _dio.patch(path, data: data);
+  Future<Response> delete(String path) => _dio.delete(path);
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>> loginUser({
+    required String firebaseToken,
+    String? name, String? phone, String? fcmToken,
+  }) async {
+    final res = await post('/auth/user/login', data: {
+      'firebase_token': firebaseToken,
+      if (name     != null) 'name':      name,
+      if (phone    != null) 'phone':     phone,
+      if (fcmToken != null) 'fcm_token': fcmToken,
+    });
+    await saveToken(res.data['token'] as String);
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> loginProvider({
+    required String firebaseToken,
+    String? name, String? phone, String? fcmToken,
+    List<String>? serviceTypes, String? sector,
+  }) async {
+    final res = await post('/auth/provider/login', data: {
+      'firebase_token': firebaseToken,
+      if (name         != null) 'name':          name,
+      if (phone        != null) 'phone':         phone,
+      if (fcmToken     != null) 'fcm_token':     fcmToken,
+      if (serviceTypes != null) 'service_types': serviceTypes,
+      if (sector       != null) 'sector':        sector,
+    });
+    await saveToken(res.data['token'] as String);
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<void> logout() async {
+    try { await post('/auth/logout'); } catch (_) {}
+    await clearToken();
+  }
+
+  // ── Providers ─────────────────────────────────────────────────────────────
+  Future<List<dynamic>> getNearbyProviders({
+    required double latitude, required double longitude,
+    double radiusKm = 10, String? serviceTypeId,
+  }) async {
+    final res = await get('/user/providers/nearby', params: {
+      'latitude': latitude, 'longitude': longitude, 'radius_km': radiusKm,
+      if (serviceTypeId != null) 'service_type_id': serviceTypeId,
+    });
+    return res.data as List;
+  }
+
+  // ── Interventions ─────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>> getEstimate({
+    required String serviceTypeId, required String providerId,
+    required double userLat, required double userLng,
+  }) async {
+    final res = await post('/user/interventions/estimate', data: {
+      'service_type_id': serviceTypeId, 'provider_id': providerId,
+      'user_latitude': userLat, 'user_longitude': userLng,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createIntervention(Map<String, dynamic> data) async {
+    final res = await post('/user/interventions', data: data);
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<List<dynamic>> getInterventions({int page = 1}) async {
+    try {
+      final res = await get('/user/interventions', params: {'page': page});
+      return (res.data['data'] as List?) ?? [];
+    } catch (_) { return []; }
+  }
+
+  Future<List<dynamic>> getUserInterventions({int page = 1}) =>
+      getInterventions(page: page);
+
+  Future<Map<String, dynamic>> getIntervention(String id) async {
+    final res = await get('/user/interventions/$id');
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<void> cancelIntervention(String id, {String? reason}) async {
+    try { await post('/user/interventions/$id/cancel', data: {'reason': reason}); }
+    catch (_) {}
+  }
+
+  Future<void> updateInterventionStatus(String id, String status) async {
+    try { await post('/user/interventions/$id/cancel', data: {'reason': status}); }
+    catch (_) {}
+  }
+
+  // ── Emergency ─────────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>> createEmergencyAlert({
+    required String type, required double latitude, required double longitude,
+    String? address, String? description,
+  }) async {
+    final res = await post('/user/emergency', data: {
+      'type': type, 'latitude': latitude, 'longitude': longitude,
+      if (address     != null) 'address':     address,
+      if (description != null) 'description': description,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  // ── User ──────────────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>> updateUser(Map<String, dynamic> data) async {
+    try {
+      final res = await patch('/user/me', data: data);
+      return res.data as Map<String, dynamic>;
+    } catch (_) { return {}; }
+  }
+
+  Future<List<dynamic>> getUserReviews() async {
+    try {
+      final res = await get('/user/reviews');
+      return (res.data as List?) ?? [];
+    } catch (_) { return []; }
+  }
+
+  // ── Vehicles ──────────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>> addVehicle(Map<String, dynamic> data) async {
+    try {
+      final res = await post('/user/vehicles', data: data);
+      return res.data as Map<String, dynamic>;
+    } catch (_) { return {}; }
+  }
+
+  Future<void> deleteVehicle(String id) async {
+    try { await delete('/user/vehicles/$id'); } catch (_) {}
+  }
+}
