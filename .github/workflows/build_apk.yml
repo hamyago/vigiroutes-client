@@ -42,13 +42,10 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      - name: Show all plugins
-        run: flutter pub deps --style=list | head -50
-
-      - name: Check GeneratedPluginRegistrant
+      - name: Remove old GeneratedPluginRegistrant
         run: |
-          find . -name "GeneratedPluginRegistrant.java" -o -name "GeneratedPluginRegistrant.kt" 2>/dev/null | head -5
-          cat android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java 2>/dev/null || echo "File not found"
+          rm -f android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+          rm -rf android/app/src/main/kotlin/ci/oyopmt/vigiroutes/vigiroutes_client
 
       - name: Build APK Release
         run: flutter build apk --release
