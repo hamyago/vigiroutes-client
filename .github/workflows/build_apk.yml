@@ -1,4 +1,4 @@
-name: Build VigiRoutes Client APK
+﻿name: Build VigiRoutes Client APK
 
 on:
   push:
@@ -45,8 +45,12 @@ jobs:
       - name: Remove duplicate MainActivity
         run: rm -rf android/app/src/main/kotlin/ci/oyopmt/vigiroutes/vigiroutes_client
 
-      - name: Check plugins v1 embedding
-        run: flutter build apk --release --verbose 2>&1 | grep -i "v1\|embedding\|plugin\|deprecated\|flutter build apk --release --verbose 2>&1 | grep -i "uses a deprecated\|The plugin\|v1 embedding" | head -30 || true
+      - name: Check v1 embedding plugins
+        run: |
+          flutter build apk --release --verbose > /tmp/build_log.txt 2>&1 || true
+          grep -i "deprecated\|v1\|plugin" /tmp/build_log.txt | head -20 || echo "No matches found"
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
 
       - name: Build APK Release
         run: flutter build apk --release
