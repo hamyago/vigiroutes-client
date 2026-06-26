@@ -43,9 +43,13 @@ jobs:
         run: flutter pub get
 
       - name: Remove old GeneratedPluginRegistrant
+        run: rm -f android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+
+      - name: Show new GeneratedPluginRegistrant
         run: |
-          rm -f android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
-          rm -rf android/app/src/main/kotlin/ci/oyopmt/vigiroutes/vigiroutes_client
+          flutter build apk --release 2>&1 | head -5 || true
+          find /home/runner -name "GeneratedPluginRegistrant.java" 2>/dev/null | head -3
+          cat $(find /home/runner -name "GeneratedPluginRegistrant.java" 2>/dev/null | head -1) 2>/dev/null || true
 
       - name: Build APK Release
         run: flutter build apk --release
