@@ -3,13 +3,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:location/location.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/services/service_type_service.dart';
 import '../../../core/models/service_type_model.dart';
 
-// Couleurs par slug (alignées avec l'API)
 const _serviceColors = {
   'depannage':  Color(0xFFFF6B35),
   'remorquage': Color(0xFF4299E1),
@@ -35,13 +35,13 @@ class HomeController extends ChangeNotifier {
   final _location = LocationService();
   final _stService = ServiceTypeService.instance;
 
-  LatLng?              _userPosition;
-  List<ProviderModel>  _providers    = [];
-  Set<Marker>          _markers      = {};
-  String?              _serviceFilter;
-  bool                 _isLoading    = true;
-  String?              _error;
-  Timer?               _refreshTimer;
+  LatLng?             _userPosition;
+  List<ProviderModel> _providers    = [];
+  Set<Marker>         _markers      = {};
+  String?             _serviceFilter;
+  bool                _isLoading    = true;
+  String?             _error;
+  Timer?              _refreshTimer;
 
   LatLng?                get userPosition  => _userPosition;
   List<ProviderModel>    get providers     => _providers;
@@ -50,8 +50,6 @@ class HomeController extends ChangeNotifier {
   String?                get selectedServiceFilter => _serviceFilter;
   bool                   get isLoading     => _isLoading;
   String?                get error         => _error;
-
-  // Service types depuis l'API
   List<ServiceTypeModel> get serviceTypes  => _stService.serviceTypes;
   bool                   get servicesLoading => _stService.isLoading;
 
@@ -60,7 +58,6 @@ class HomeController extends ChangeNotifier {
     _error     = null;
     notifyListeners();
 
-    // Charger les service types depuis l'API
     await _stService.load();
 
     final pos = await _location.getCurrentPosition();
@@ -71,7 +68,7 @@ class HomeController extends ChangeNotifier {
       return;
     }
 
-    _userPosition = LatLng(pos.latitude, pos.longitude);
+    _userPosition = LatLng(pos.latitude!, pos.longitude!);
     _isLoading    = false;
     notifyListeners();
 
@@ -104,15 +101,11 @@ class HomeController extends ChangeNotifier {
     }
   }
 
-  /// Résoudre le slug depuis un service_type_id (UUID) ou slug direct
   String _resolveSlug(String serviceTypeIdOrSlug) {
-    // D'abord chercher par ID (UUID)
     final byId = _stService.findById(serviceTypeIdOrSlug);
     if (byId != null) return byId.slug;
-    // Puis par slug direct
     final bySlug = _stService.findBySlug(serviceTypeIdOrSlug);
     if (bySlug != null) return bySlug.slug;
-    // Fallback
     return 'other';
   }
 
@@ -166,7 +159,7 @@ class HomeController extends ChangeNotifier {
     if (kIsWeb) return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
     const color = Color(0xFF1A56DB);
     const size  = 80.0;
-    final rec   = ui.PictureRecorder();
+    final rec    = ui.PictureRecorder();
     final canvas = Canvas(rec);
     canvas.drawCircle(const Offset(size/2,size/2-4),34,Paint()..color=color.withValues(alpha:0.15));
     canvas.drawCircle(const Offset(size/2,size/2-4),28,Paint()..color=color);
@@ -188,7 +181,7 @@ class HomeController extends ChangeNotifier {
     }
     final color = _serviceColors[slug] ?? const Color(0xFFFF6B35);
     const size  = 80.0;
-    final rec   = ui.PictureRecorder();
+    final rec    = ui.PictureRecorder();
     final canvas = Canvas(rec);
     canvas.drawCircle(const Offset(size/2+2,size/2+4),28,Paint()..color=Colors.black.withValues(alpha:0.2)..maskFilter=const MaskFilter.blur(BlurStyle.normal,4));
     canvas.drawCircle(const Offset(size/2,size/2-4),28,Paint()..color=color);

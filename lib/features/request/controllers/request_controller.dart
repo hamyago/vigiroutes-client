@@ -53,7 +53,7 @@ class RequestController extends ChangeNotifier {
 
     final pos = await _location.getCurrentPosition();
     if (pos != null) {
-      _userPosition = LatLng(pos.latitude, pos.longitude);
+      _userPosition = LatLng(pos.latitude!, pos.longitude!);
       _userAddress  = await _location.getAddressFromCoords(
           pos.latitude, pos.longitude);
     }

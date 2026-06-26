@@ -21,8 +21,8 @@ class EmergencyService {
     double lat = 0, lng = 0;
     String? address;
     if (pos != null) {
-      lat     = pos.latitude;
-      lng     = pos.longitude;
+      lat     = pos.latitude ?? 0;
+      lng     = pos.longitude ?? 0;
       address = await _location.getAddressFromCoords(lat, lng);
     }
 
