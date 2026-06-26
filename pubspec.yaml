@@ -27,8 +27,8 @@ dependencies:
   # Maps (compatible Flutter 3.32)
   google_maps_flutter: ^2.9.0
 
-  # Location - remplacement de geolocator+geocoding (v1 embedding bug)
-  location: ^7.0.0
+  # Location
+  geolocator: ^13.0.2
 
   # UI
   cached_network_image: ^3.4.1
@@ -71,3 +71,5 @@ flutter:
           weight: 600
         - asset: fonts/Poppins-Bold.ttf
           weight: 700
+
+
