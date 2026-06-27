@@ -48,3 +48,5 @@ android/app/google-services.json
 android/app/GoogleService-Info.plist
 
 android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+
+android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
