@@ -26,7 +26,7 @@
             android:value="vigiroutes_channel"/>
 
         <activity
-            android:name=".MainActivity"
+            android:name="ci.oyopmt.vigiroutes.client.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
