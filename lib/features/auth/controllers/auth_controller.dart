@@ -137,7 +137,7 @@ class AuthController extends ChangeNotifier {
       _isLoading = false;
       _state     = AuthState.unauthenticated;
       notifyListeners();
-      return true;
+      return false;  // ← était true (bug silencieux : succès affiché alors que le login a échoué)
     }
   }
 

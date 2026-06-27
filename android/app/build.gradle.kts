@@ -24,6 +24,10 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
+    kotlinOptions {
+        jvmTarget = "21"
+    }
+
     signingConfigs {
         create("release") {
             keyAlias      = keyProperties.getProperty("keyAlias")      ?: "vigiroutes"

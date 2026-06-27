@@ -22,10 +22,18 @@ class ApiService {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         final prefs = await SharedPreferences.getInstance();
-        String? token;
 
-        if (options.path.startsWith('/user/')) {
-          // Routes user → token Firebase ID
+        // Routes /user/* → Firebase ID token (jamais Sanctum)
+        // Routes /provider/* → Firebase ID token
+        // Routes /auth/* → aucun token (login/register)
+        // Autres → Sanctum token (admin, etc.)
+        final path = options.path;
+
+        if (path.startsWith('/auth/')) {
+          // Pas de token sur les routes d'authentification
+        } else if (path.startsWith('/user/') || path.startsWith('/provider/')) {
+          // Firebase ID token — toujours frais depuis Firebase
+          String? token;
           try {
             final u = fb.FirebaseAuth.instance.currentUser;
             if (u != null) {
@@ -37,12 +45,13 @@ class ApiService {
           } catch (_) {
             token = prefs.getString('firebase_token');
           }
+          if (token != null) options.headers['Authorization'] = 'Bearer $token';
         } else {
-          // Autres routes → token Sanctum
-          token = prefs.getString('sanctum_token');
+          // Sanctum token (routes admin, etc.)
+          final token = prefs.getString('sanctum_token');
+          if (token != null) options.headers['Authorization'] = 'Bearer $token';
         }
 
-        if (token != null) options.headers['Authorization'] = 'Bearer $token';
         if (kDebugMode) debugPrint('[API] ${options.method} ${options.path}');
         handler.next(options);
       },
@@ -66,8 +75,14 @@ class ApiService {
     await p.remove('firebase_token');
   }
 
-  Future<bool> get hasToken async =>
-      (await SharedPreferences.getInstance()).containsKey('sanctum_token');
+  /// Retourne true si l'utilisateur a un token actif (Sanctum OU Firebase)
+  Future<bool> get hasToken async {
+    final prefs = await SharedPreferences.getInstance();
+    // Vérifier d'abord Sanctum (token API)
+    if (prefs.containsKey('sanctum_token')) return true;
+    // Sinon vérifier Firebase directement (session active)
+    return fb.FirebaseAuth.instance.currentUser != null;
+  }
 
   // ── HTTP ──────────────────────────────────────────────────────────────────
   Future<Response> get(String path, {Map<String, dynamic>? params}) =>
