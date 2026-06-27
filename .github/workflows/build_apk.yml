@@ -42,6 +42,17 @@ jobs:
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}"     >> android/key.properties
           echo "keyAlias=vigiroutes"                         >> android/key.properties
           echo "storeFile=app/vigiroutes-release.jks"        >> android/key.properties
+      
+- name: Debug v1 embedding detection
+        run: |
+          echo "=== AndroidManifest.xml ==="
+          cat android/app/src/main/AndroidManifest.xml
+          echo "=== Fichiers dans android/app/src/main/ ==="
+          find android/app/src/main/ -type f
+          echo "=== flutter doctor ==="
+          flutter doctor -v
+          echo "=== Test embedding detection ==="
+          flutter build apk --release 2>&1 || true
 
       - name: Flutter pub get
         run: flutter pub get
