@@ -22,7 +22,7 @@ jobs:
         with:
           flutter-version: '3.44.1'
           channel: stable
-          cache: true
+          cache: false
 
       - name: Create local.properties
         run: |
