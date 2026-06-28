@@ -28,14 +28,12 @@ class VehiclesScreen extends StatelessWidget {
         label: const Text('Ajouter'),
       ),
       body: vehicles.isEmpty
-          ? const Center(
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Text('🚗', style: TextStyle(fontSize: 48)),
-                SizedBox(height: 12),
-                Text('Aucun véhicule enregistré',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-              ]),
-            )
+          ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text('🚗', style: TextStyle(fontSize: 48)),
+              SizedBox(height: 12),
+              Text('Aucun véhicule enregistré',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            ]))
           : ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: vehicles.length,
@@ -50,11 +48,10 @@ class VehiclesScreen extends StatelessWidget {
   Future<void> _delete(BuildContext context, String id) async {
     try {
       await ApiService.instance.deleteVehicle(id);
+      if (context.mounted) await context.read<AuthController>().refreshUser();
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
-      }
+      if (context.mounted) ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Erreur : $e')));
     }
   }
 
@@ -82,11 +79,9 @@ class _VehicleTile extends StatelessWidget {
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)],
         ),
         child: Row(children: [
-          Container(
-            width: 48, height: 48,
+          Container(width: 48, height: 48,
             decoration: BoxDecoration(color: AppColors.primaryLight, shape: BoxShape.circle),
-            child: const Center(child: Text('🚗', style: TextStyle(fontSize: 24))),
-          ),
+            child: const Center(child: Text('🚗', style: TextStyle(fontSize: 24)))),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('${vehicle.brand} ${vehicle.model}',
@@ -94,13 +89,11 @@ class _VehicleTile extends StatelessWidget {
             Text(vehicle.plate,
                 style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
             if (vehicle.color != null)
-              Text(vehicle.color!,
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+              Text(vehicle.color!, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
           ])),
           IconButton(
             icon: const Icon(Icons.delete_outline, color: AppColors.error),
-            onPressed: onDelete,
-          ),
+            onPressed: onDelete),
         ]),
       );
 }
@@ -112,11 +105,11 @@ class _AddVehicleSheet extends StatefulWidget {
 }
 
 class _AddVehicleSheetState extends State<_AddVehicleSheet> {
-  final _brandCtrl  = TextEditingController();
-  final _modelCtrl  = TextEditingController();
-  final _plateCtrl  = TextEditingController();
-  final _colorCtrl  = TextEditingController();
-  bool  _loading    = false;
+  final _brandCtrl = TextEditingController();
+  final _modelCtrl = TextEditingController();
+  final _plateCtrl = TextEditingController();
+  final _colorCtrl = TextEditingController();
+  bool  _loading   = false;
 
   @override
   void dispose() {
@@ -126,19 +119,26 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
   }
 
   Future<void> _save() async {
-    if (_brandCtrl.text.isEmpty || _plateCtrl.text.isEmpty) return;
+    if (_brandCtrl.text.isEmpty || _plateCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Marque et immatriculation sont requis')));
+      return;
+    }
     setState(() => _loading = true);
     try {
       final vehicle = VehicleModel(
-        id:     const Uuid().v4(),
-        userId: '',
-        brand:  _brandCtrl.text.trim(),
-        model:  _modelCtrl.text.trim(),
-        plate:  _plateCtrl.text.trim().toUpperCase(),
-        color:  _colorCtrl.text.trim().isEmpty ? null : _colorCtrl.text.trim(),
+        id: const Uuid().v4(), userId: '',
+        brand: _brandCtrl.text.trim(), model: _modelCtrl.text.trim(),
+        plate: _plateCtrl.text.trim().toUpperCase(),
+        color: _colorCtrl.text.trim().isEmpty ? null : _colorCtrl.text.trim(),
       );
       await ApiService.instance.addVehicle(vehicle.toJson());
-      if (mounted) Navigator.pop(context);
+      if (mounted) await context.read<AuthController>().refreshUser();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Véhicule ajouté ✅'), backgroundColor: AppColors.success));
+        Navigator.pop(context);
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Erreur : $e')));
@@ -149,8 +149,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(
-        left: 20, right: 20, top: 20,
+    padding: EdgeInsets.only(left: 20, right: 20, top: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20),
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       const Text('Ajouter un véhicule',
@@ -163,21 +162,18 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
           decoration: const InputDecoration(labelText: 'Modèle', hintText: 'Corolla')),
       const SizedBox(height: 12),
       TextField(controller: _plateCtrl,
-          decoration: const InputDecoration(labelText: 'Immatriculation *', hintText: 'AB 1234 CI')),
+          decoration: const InputDecoration(labelText: 'Immatriculation *', hintText: 'AB 1234 CI'),
+          textCapitalization: TextCapitalization.characters),
       const SizedBox(height: 12),
       TextField(controller: _colorCtrl,
           decoration: const InputDecoration(labelText: 'Couleur', hintText: 'Blanc')),
       const SizedBox(height: 20),
-      SizedBox(
-        width: double.infinity,
-        height: 48,
+      SizedBox(width: double.infinity, height: 48,
         child: ElevatedButton(
           onPressed: _loading ? null : _save,
           child: _loading
               ? const CircularProgressIndicator(color: Colors.white)
-              : const Text('Enregistrer'),
-        ),
-      ),
+              : const Text('Enregistrer'))),
     ]),
   );
 }
