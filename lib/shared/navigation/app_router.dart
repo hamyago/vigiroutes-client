@@ -30,7 +30,7 @@ class UserShell extends StatefulWidget {
 
 class _UserShellState extends State<UserShell> {
   int _idx = 0;
-  static const _routes = ['/user/home', '/user/history'];
+  static const _routes = ['/user/home', '/user/history', '/user/profile'];
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -45,8 +45,7 @@ class _UserShellState extends State<UserShell> {
               style: TextStyle(
                   color: Colors.white, fontWeight: FontWeight.w800)),
         ),
-        floatingActionButtonLocation:
-            FloatingActionButtonLocation.centerDocked,
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         bottomNavigationBar: BottomAppBar(
           shape: const CircularNotchedRectangle(),
           notchMargin: 8,
@@ -74,6 +73,16 @@ class _UserShellState extends State<UserShell> {
                       onTap: () {
                         setState(() => _idx = 1);
                         context.go(_routes[1]);
+                      })),
+              Expanded(
+                  child: _NavItem(
+                      icon: Icons.person_outline,
+                      activeIcon: Icons.person,
+                      label: 'Profil',
+                      isActive: _idx == 2,
+                      onTap: () {
+                        setState(() => _idx = 2);
+                        context.go(_routes[2]);
                       })),
             ]),
           ),
@@ -119,26 +128,15 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
         final isAuth    = authState == AuthState.authenticated;
         final onSplash  = loc == '/';
 
-        // Ne jamais bloquer le splash
         if (onSplash) return null;
-
-        // Ne jamais bloquer les écrans auth (phone, otp, profile-setup)
-        // même pendant le chargement — critique pour que l'OTP s'affiche
         if (loc.startsWith('/auth')) return null;
-
-        // Pendant le chargement initial, rester sur place
         if (isLoading) return null;
-
-        // Non authentifié → onboarding
         if (!isAuth && loc != '/onboarding') return '/onboarding';
-
-        // Authentifié sur onboarding → home
         if (isAuth && loc == '/onboarding') {
           if (auth.isProvider) return '/provider/home';
           if (auth.isUser)     return '/user/home';
           return null;
         }
-
         return null;
       },
       routes: [
@@ -147,8 +145,7 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
         GoRoute(
             path: '/auth/phone',
             builder: (ctx, s) => PhoneAuthScreen(
-                isProvider:
-                    s.uri.queryParameters['role'] == 'provider')),
+                isProvider: s.uri.queryParameters['role'] == 'provider')),
         GoRoute(
             path: '/auth/otp',
             builder: (ctx, s) {
@@ -174,12 +171,12 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
             GoRoute(
                 path: '/user/history',
                 builder: (_, __) => const hist.HistoryScreen()),
+            GoRoute(
+                path: '/user/profile',
+                builder: (_, __) => const UserProfileScreen()),
           ],
         ),
 
-        GoRoute(
-            path: '/user/profile',
-            builder: (_, __) => const UserProfileScreen()),
         GoRoute(
             path: '/user/request',
             builder: (ctx, s) => RequestScreen(

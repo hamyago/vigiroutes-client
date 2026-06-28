@@ -5,7 +5,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import '../controllers/home_controller.dart';
 import '../../../core/constants/app_colors.dart';
-// import provider_card supprimé
 
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
@@ -102,7 +101,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  // Bouton notifications
                   Container(
                     width: 44,
                     height: 44,
@@ -123,7 +121,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Bouton profil (restauré)
                   Container(
                     width: 44,
                     height: 44,
@@ -180,9 +177,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             ),
           ),
 
-          // ── SOS Button ───────────────────────────────────────────────────
+          // ── Bouton Dépannage (jaune) ──────────────────────────────────────
           Positioned(
-            bottom: 240,
+            bottom: 160,
             right: 16,
             child: GestureDetector(
               onTap: () => context.push('/user/request'),
@@ -190,11 +187,11 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: AppColors.accent,
+                  color: const Color(0xFFFFD600),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.accent.withValues(alpha: 0.4),
+                      color: const Color(0xFFFFD600).withValues(alpha: 0.5),
                       blurRadius: 20,
                       spreadRadius: 4,
                     ),
@@ -205,10 +202,10 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   children: [
                     Text('🆘', style: TextStyle(fontSize: 24)),
                     Text(
-                      'SOS',
+                      'Dépannage',
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
+                        color: Colors.black,
+                        fontSize: 9,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -220,7 +217,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
           // ── Recenter button ───────────────────────────────────────────────
           Positioned(
-            bottom: 240,
+            bottom: 160,
             left: 16,
             child: Container(
               width: 44,
@@ -302,11 +299,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                         ? _EmptyProviders()
                         : ListView.builder(
                             controller: scrollCtrl,
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16),
                             itemCount: ctrl.providers.length,
                             itemBuilder: (_, i) => _ProviderTile(
                               provider: ctrl.providers[i],
-                              onTap: () => context.push('/user/request', extra: ctrl.providers[i]),
+                              onTap: () => context.push('/user/request',
+                                  extra: ctrl.providers[i]),
                             ),
                           ),
                   ),
@@ -375,7 +374,8 @@ class _MapError extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.location_off, size: 64, color: AppColors.textMuted),
+                const Icon(Icons.location_off,
+                    size: 64, color: AppColors.textMuted),
                 const SizedBox(height: 16),
                 Text(
                   message,
@@ -436,29 +436,39 @@ class _ProviderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)],
-      ),
-      child: Row(children: [
-        CircleAvatar(
-          backgroundColor: const Color(0xFFFFF0EB),
-          child: Text(provider.serviceTypes.isNotEmpty ? '🔧' : '🛠️'),
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)
+            ],
+          ),
+          child: Row(children: [
+            CircleAvatar(
+              backgroundColor: const Color(0xFFFFF0EB),
+              child: Text(
+                  provider.serviceTypes.isNotEmpty ? '🔧' : '🛠️'),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(provider.name,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 14)),
+                  Text(
+                      '★ ${provider.rating.toStringAsFixed(1)} · ${provider.serviceTypes.take(2).join(', ')}',
+                      style: const TextStyle(
+                          color: Color(0xFF6B7280), fontSize: 12)),
+                ])),
+            const Icon(Icons.chevron_right, color: Color(0xFF9CA3AF)),
+          ]),
         ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(provider.name,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          Text('★ ${provider.rating.toStringAsFixed(1)} · ${provider.serviceTypes.take(2).join(', ')}',
-              style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12)),
-        ])),
-        const Icon(Icons.chevron_right, color: Color(0xFF9CA3AF)),
-      ]),
-    ),
-  );
+      );
 }
