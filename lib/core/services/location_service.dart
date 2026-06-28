@@ -1,6 +1,6 @@
-import 'dart:math';
+﻿import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 
 class LocationData {
   final double latitude;
@@ -10,22 +10,34 @@ class LocationData {
 }
 
 class LocationService {
-  static const _channel = MethodChannel('ci.oyopmt.vigiroutes/location');
-
   Future<LocationData?> getCurrentPosition() async {
     try {
-      final hasPermission = await _channel.invokeMethod<bool>('checkPermission') ?? false;
-      if (!hasPermission) {
-        await _channel.invokeMethod('requestPermission');
-        await Future.delayed(const Duration(milliseconds: 500));
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        debugPrint('[Location] GPS desactive');
+        return null;
       }
-      final result = await _channel.invokeMethod<Map>('getCurrentPosition');
-      if (result == null) return null;
-      return LocationData(
-        latitude:  (result['latitude']  as num).toDouble(),
-        longitude: (result['longitude'] as num).toDouble(),
-        accuracy:  (result['accuracy']  as num?)?.toDouble(),
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          debugPrint('[Location] Permission refusee');
+          return null;
+        }
+      }
+      if (permission == LocationPermission.deniedForever) {
+        debugPrint('[Location] Permission refusee definitivement');
+        return null;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
       );
+      return LocationData(latitude: pos.latitude, longitude: pos.longitude, accuracy: pos.accuracy);
     } catch (e) {
       debugPrint('[Location] error: $e');
       return null;
