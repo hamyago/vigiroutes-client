@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -105,7 +105,7 @@ class _InterventionTile extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: () => context.push('/user/request'),
                 icon: const Icon(Icons.sos, size: 16),
-                label: const Text('Faire appel à un prestataire'),
+                label: const Text('Faire appel a un prestataire'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
                   side: const BorderSide(color: AppColors.primary),
@@ -128,10 +128,10 @@ class _InterventionTile extends StatelessWidget {
 
   (String, Color) _statusInfo(String status) => switch (status) {
         'pending'     => ('En attente', AppColors.warning),
-        'accepted'    => ('Acceptée', AppColors.primary),
+        'accepted'    => ('Acceptee', AppColors.primary),
         'in_progress' => ('En cours', AppColors.success),
-        'completed'   => ('Terminée', AppColors.success),
-        'cancelled'   => ('Annulée', AppColors.error),
+        'completed'   => ('Terminee', AppColors.success),
+        'cancelled'   => ('Annulee', AppColors.error),
         _             => ('Inconnu', AppColors.textMuted),
       };
 }
@@ -163,13 +163,13 @@ class _Empty extends StatelessWidget {
           const Text('Aucune intervention',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
-          const Text('Vos demandes de dépannage apparaîtront ici.',
+          const Text('Vos demandes de depannage apparaitront ici.',
               style: TextStyle(color: AppColors.textSecondary), textAlign: TextAlign.center),
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: () => context.push('/user/request'),
             icon: const Icon(Icons.sos),
-            label: const Text('Faire appel à un prestataire'),
+            label: const Text('Faire appel a un prestataire'),
           ),
         ]),
       );

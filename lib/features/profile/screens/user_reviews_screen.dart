@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/models.dart';
@@ -30,10 +30,10 @@ class UserReviewsScreen extends StatelessWidget {
             return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               Text('⭐', style: TextStyle(fontSize: 48)),
               SizedBox(height: 12),
-              Text('Aucun avis reçu pour le moment',
+              Text('Aucun avis recu pour le moment',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
               SizedBox(height: 8),
-              Text('Les prestataires peuvent vous noter\naprès une intervention.',
+              Text('Les prestataires peuvent vous noter apres une intervention.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppColors.textSecondary)),
             ]));

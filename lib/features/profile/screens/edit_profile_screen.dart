@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -45,7 +45,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (mounted) await context.read<AuthController>().refreshUser();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profil mis à jour ✅'),
+          const SnackBar(content: Text('Profil mis a jour'),
               backgroundColor: AppColors.success));
         Navigator.pop(context);
       }
@@ -74,10 +74,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (file == null) return;
     setState(() => _photoLoading = true);
     try {
-      await ApiService.instance.updateUser({'photo_base64': await file.readAsBytes()});
+      await ApiService.instance.updateUser({'photo_url': file.path});
       if (mounted) await context.read<AuthController>().refreshUser();
       if (mounted) ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Photo mise à jour ✅')));
+          .showSnackBar(const SnackBar(content: Text('Photo mise a jour')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Erreur photo : $e')));

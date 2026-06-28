@@ -48,14 +48,6 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      - name: Debug embedding detection
-        run: |
-          echo "=== AndroidManifest.xml ==="
-          cat android/app/src/main/AndroidManifest.xml
-          echo "=== Fichiers android/ ==="
-          find android/ -maxdepth 2 -type f
-          flutter build apk --release 2>&1 || true
-
       - name: Build APK Release
         run: flutter build apk --release
 

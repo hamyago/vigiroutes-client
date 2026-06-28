@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/constants/app_colors.dart';
@@ -21,7 +21,7 @@ class VehiclesScreen extends StatelessWidget {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mes véhicules')),
+      appBar: AppBar(title: const Text('Mes vehicules')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddVehicle(context),
         icon: const Icon(Icons.add),
@@ -31,7 +31,7 @@ class VehiclesScreen extends StatelessWidget {
           ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               Text('🚗', style: TextStyle(fontSize: 48)),
               SizedBox(height: 12),
-              Text('Aucun véhicule enregistré',
+              Text('Aucun vehicule enregistre',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             ]))
           : ListView.builder(
@@ -136,7 +136,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
       if (mounted) await context.read<AuthController>().refreshUser();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Véhicule ajouté ✅'), backgroundColor: AppColors.success));
+            const SnackBar(content: Text('Vehicule ajoute'), backgroundColor: AppColors.success));
         Navigator.pop(context);
       }
     } catch (e) {
@@ -152,14 +152,14 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
     padding: EdgeInsets.only(left: 20, right: 20, top: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20),
     child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Text('Ajouter un véhicule',
+      const Text('Ajouter un vehicule',
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
       const SizedBox(height: 16),
       TextField(controller: _brandCtrl,
           decoration: const InputDecoration(labelText: 'Marque *', hintText: 'Toyota')),
       const SizedBox(height: 12),
       TextField(controller: _modelCtrl,
-          decoration: const InputDecoration(labelText: 'Modèle', hintText: 'Corolla')),
+          decoration: const InputDecoration(labelText: 'Modele', hintText: 'Corolla')),
       const SizedBox(height: 12),
       TextField(controller: _plateCtrl,
           decoration: const InputDecoration(labelText: 'Immatriculation *', hintText: 'AB 1234 CI'),
