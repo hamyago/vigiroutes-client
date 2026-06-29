@@ -48,7 +48,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 zoom: 14,
               ),
               onMapCreated: (c) => _mapController = c,
-              myLocationEnabled: true,
+              myLocationEnabled: !ctrl.locationApprox,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               markers: ctrl.markers,

@@ -51,6 +51,11 @@
             </intent-filter>
         </service>
         <meta-data android:name="flutterEmbedding" android:value="2"/>
+        <!-- Force le moteur Skia : Impeller masque la couche Flutter au-dessus
+             des platform views (GoogleMap) sur Android (Flutter 3.4x). -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
     </application>
 
     <queries>
