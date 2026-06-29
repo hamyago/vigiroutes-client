@@ -192,7 +192,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
           // ── Bouton Dépannage (jaune) ──────────────────────────────────────
           Positioned(
-            bottom: 160,
+            bottom: MediaQuery.of(context).size.height * 0.28 + 16,
             right: 16,
             child: GestureDetector(
               onTap: () => context.push('/user/request'),
@@ -230,7 +230,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
           // ── Recenter button ───────────────────────────────────────────────
           Positioned(
-            bottom: 160,
+            bottom: MediaQuery.of(context).size.height * 0.28 + 16,
             left: 16,
             child: Container(
               width: 44,
@@ -291,7 +291,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     child: Row(
                       children: [
                         Text(
-                          '${ctrl.providers.length} prestataire(s) nearby',
+                          '${ctrl.providers.length} prestataire(s) à proximité',
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 15,

@@ -15,6 +15,7 @@ import '../../features/profile/screens/edit_profile_screen.dart';
 import '../../features/profile/screens/vehicles_screen.dart';
 import '../../features/profile/screens/user_reviews_screen.dart';
 import '../../features/request/screens/request_screen.dart';
+import '../../features/request/controllers/request_controller.dart';
 import '../../features/tracking/screens/tracking_screen.dart' as track;
 import '../../features/emergency/screens/emergency_screen.dart';
 import '../../features/emergency/controllers/emergency_controller.dart';
@@ -183,8 +184,11 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
 
         GoRoute(
             path: '/user/request',
-            builder: (ctx, s) => RequestScreen(
-                preselectedProvider: s.extra as ProviderModel?)),
+            builder: (ctx, s) => ChangeNotifierProvider(
+                  create: (_) => RequestController(),
+                  child: RequestScreen(
+                      preselectedProvider: s.extra as ProviderModel?),
+                )),
         GoRoute(
             path: '/user/tracking/:id',
             builder: (ctx, s) => track.TrackingScreen(
