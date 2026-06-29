@@ -6,6 +6,11 @@ import 'package:provider/provider.dart';
 import '../controllers/home_controller.dart';
 import '../../../core/constants/app_colors.dart';
 
+/// DIAGNOSTIC TEMPORAIRE : true = remplace GoogleMap par un cadre neutre,
+/// pour vérifier si le reste de l'écran (boutons, liste) s'affiche.
+/// Repasser à false une fois la cause identifiée.
+const bool _kDiagnoseDisableMap = true;
+
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
 
@@ -42,17 +47,26 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
         children: [
           // ── Map ──────────────────────────────────────────────────────────
           if (ctrl.userPosition != null)
-            GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: ctrl.userPosition!,
-                zoom: 14,
-              ),
-              onMapCreated: (c) => _mapController = c,
-              myLocationEnabled: !ctrl.locationApprox,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              markers: ctrl.markers,
-            )
+            _kDiagnoseDisableMap
+                ? Container(
+                    color: const Color(0xFFDDE6F0),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      'CARTE DESACTIVEE (diagnostic)',
+                      style: TextStyle(color: Colors.black54, fontSize: 16),
+                    ),
+                  )
+                : GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: ctrl.userPosition!,
+                      zoom: 14,
+                    ),
+                    onMapCreated: (c) => _mapController = c,
+                    myLocationEnabled: !ctrl.locationApprox,
+                    myLocationButtonEnabled: false,
+                    zoomControlsEnabled: false,
+                    markers: ctrl.markers,
+                  )
           else if (ctrl.error != null)
             _MapError(
               message: ctrl.error!,

@@ -19,6 +19,22 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {}
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // En release, une erreur de build affiche un écran gris muet. On la rend
+  // lisible à l'écran pour pouvoir diagnostiquer sans câble/logcat.
+  ErrorWidget.builder = (FlutterErrorDetails details) => Material(
+        color: const Color(0xFF8B0000),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+          alignment: Alignment.topLeft,
+          child: SingleChildScrollView(
+            child: Text(
+              'ERREUR UI:\n\n${details.exceptionAsString()}',
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+        ),
+      );
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
