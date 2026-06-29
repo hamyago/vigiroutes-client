@@ -135,9 +135,11 @@ class ApiService {
   }) async {
     final res = await get('/user/providers/nearby', params: {
       'latitude': latitude, 'longitude': longitude, 'radius_km': radiusKm,
-      if (serviceTypeId != null) 'service_type_id': serviceTypeId,
+      if (serviceTypeId != null) 'service_type': serviceTypeId,
     });
-    return res.data as List;
+    final d = res.data;
+    if (d is Map && d['providers'] is List) return d['providers'] as List;
+    return (d as List?) ?? [];
   }
 
   // ── Interventions ─────────────────────────────────────────────────────────
