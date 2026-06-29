@@ -8,6 +8,7 @@ import '../../features/auth/screens/phone_auth_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
 import '../../features/auth/screens/profile_setup_screen.dart';
 import '../../features/home/screens/home_screen.dart';
+import '../../features/home/controllers/home_controller.dart';
 import '../../features/history/screens/history_screen.dart' as hist;
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
@@ -167,7 +168,10 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
           routes: [
             GoRoute(
                 path: '/user/home',
-                builder: (_, __) => const UserHomeScreen()),
+                builder: (_, __) => ChangeNotifierProvider(
+                      create: (_) => HomeController(),
+                      child: const UserHomeScreen(),
+                    )),
             GoRoute(
                 path: '/user/history',
                 builder: (_, __) => const hist.HistoryScreen()),

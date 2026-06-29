@@ -6,10 +6,9 @@ import 'package:provider/provider.dart';
 import '../controllers/home_controller.dart';
 import '../../../core/constants/app_colors.dart';
 
-/// DIAGNOSTIC TEMPORAIRE : true = remplace GoogleMap par un cadre neutre,
-/// pour vérifier si le reste de l'écran (boutons, liste) s'affiche.
-/// Repasser à false une fois la cause identifiée.
-const bool _kDiagnoseDisableMap = true;
+/// DIAGNOSTIC : true = remplace GoogleMap par un cadre neutre.
+/// Remis à false : la cause du crash était l'absence de HomeController.
+const bool _kDiagnoseDisableMap = false;
 
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
