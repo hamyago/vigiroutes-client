@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/models/models.dart';
+import '../../../core/services/alert_service.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/realtime_service.dart';
 
@@ -41,16 +43,39 @@ class TrackingController extends ChangeNotifier {
         .where((data) => data['id'] == interventionId)
         .listen((data) {
           if (_intervention != null) {
+            final prevStatus = _intervention!.status;
             _intervention = _intervention!.copyWithWs(data);
+            final newStatus = _intervention!.status;
+            if (prevStatus != newStatus) {
+              _onStatusChanged(prevStatus, newStatus);
+            }
             notifyListeners();
             debugPrint('[Tracking] Mise à jour WS : ${_intervention!.status}');
           }
         });
   }
 
+  /// Réagit aux changements de statut temps réel.
+  void _onStatusChanged(String previous, String current) {
+    // Le prestataire vient d'accepter → il est en route vers l'utilisateur.
+    if (current == AppConstants.statusAccepted &&
+        previous != AppConstants.statusAccepted) {
+      AlertService.instance.providerOnTheWay(
+        providerName:
+            _intervention?.providerName ?? _intervention?.provider?.name,
+      );
+    }
+    // Intervention terminée ou annulée → on coupe toute alerte en cours.
+    if (current == AppConstants.statusCompleted ||
+        current == AppConstants.statusCancelled) {
+      AlertService.instance.stop();
+    }
+  }
+
   @override
   void dispose() {
     _wsSub?.cancel();
+    AlertService.instance.reset(); // réarme l'alerte pour une prochaine intervention
     super.dispose();
   }
 }
