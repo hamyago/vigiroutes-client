@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import '../../../core/models/service_type_model.dart';
-import '../../../core/services/api_service.dart';
+import '../models/service_type_model.dart';
+import 'api_service.dart';
 
 class ServiceTypeService extends ChangeNotifier {
   static final ServiceTypeService instance = ServiceTypeService._();

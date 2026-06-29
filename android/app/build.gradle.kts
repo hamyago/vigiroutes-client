@@ -39,7 +39,8 @@ android {
 
     defaultConfig {
         applicationId = "ci.oyopmt.vigiroutes.client"
-        minSdk        = 23
+        // Firebase Auth/Messaging exigent minSdk >= 23 ; on garde le plancher Flutter sinon.
+        minSdk = maxOf(flutter.minSdkVersion, 23)
         targetSdk     = flutter.targetSdkVersion
         versionCode   = flutter.versionCode
         versionName   = flutter.versionName

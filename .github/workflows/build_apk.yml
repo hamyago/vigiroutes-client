@@ -1,4 +1,4 @@
-﻿name: Build VigiRoutes Client APK
+name: Build VigiRoutes Client APK
 
 on:
   push:
@@ -24,24 +24,27 @@ jobs:
           channel: stable
           cache: false
 
+      - name: Flutter version (debug)
+        run: flutter --version
+
       - name: Create local.properties
         run: |
-          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          echo "sdk.dir=$ANDROID_HOME"     > android/local.properties
           echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
 
-      - name: Create gradle.properties secrets
-        run: |
-          echo "MAPS_API_KEY=${{ secrets.MAPS_API_KEY }}" >> android/gradle.properties
+      - name: Inject MAPS_API_KEY
+        run: echo "MAPS_API_KEY=${{ secrets.MAPS_API_KEY }}" >> android/gradle.properties
 
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/vigiroutes-release.jks
 
       - name: Create key.properties
         run: |
-          echo "storePassword=${{ secrets.STORE_PASSWORD }}" > android/key.properties
+          echo "storePassword=${{ secrets.STORE_PASSWORD }}" >  android/key.properties
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}"     >> android/key.properties
           echo "keyAlias=vigiroutes"                         >> android/key.properties
-          echo "storeFile=/home/runner/work/vigiroutes-client/vigiroutes-client/android/app/vigiroutes-release.jks" >> android/key.properties
+          echo "storeFile=vigiroutes-release.jks"            >> android/key.properties
+
       - name: Decode google-services.json
         run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 --decode > android/app/google-services.json
 
