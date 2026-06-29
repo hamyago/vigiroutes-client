@@ -56,32 +56,21 @@ class _OtpScreenState extends State<OtpScreen> {
 
     if (!ok) return; // erreur affichée par auth.error
 
-    // Attendre que le rôle soit chargé (max 3 secondes)
-    String? role = auth.role;
-    if (role == null) {
-      for (int i = 0; i < 6; i++) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (!mounted) return;
-        role = context.read<AuthController>().role;
-        if (role != null) break;
-      }
+    // Laisser le temps au profil d'arriver depuis le backend (max 3 s)
+    for (int i = 0; i < 6 && auth.user == null; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
     }
-
     if (!mounted) return;
 
-    if (role == 'provider') {
-      // Prestataire connecté → home prestataire
+    final a = context.read<AuthController>();
+    if (a.isProvider) {
       context.go('/provider/home');
-    } else if (role == 'user') {
-      // Utilisateur existant → home client
-      context.go('/user/home');
+    } else if (a.needsProfileSetup) {
+      // Nouvel utilisateur (nom non renseigné) → compléter le profil
+      context.go('/auth/profile-setup', extra: {'isProvider': false});
     } else {
-      // Nouvel utilisateur → compléter le profil
-      // Dans l'app client, c'est toujours un automobiliste
-      context.go(
-        '/auth/profile-setup',
-        extra: {'isProvider': false},
-      );
+      context.go('/user/home');
     }
   }
 

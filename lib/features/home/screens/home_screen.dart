@@ -235,10 +235,10 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               child: IconButton(
                 icon: const Icon(Icons.my_location,
                     size: 20, color: AppColors.primary),
-                onPressed: () {
-                  if (ctrl.userPosition != null) {
-                    _animateTo(ctrl.userPosition!);
-                  }
+                onPressed: () async {
+                  final pos = await ctrl.refreshLocation();
+                  final target = pos ?? ctrl.userPosition;
+                  if (target != null) _animateTo(target);
                 },
               ),
             ),

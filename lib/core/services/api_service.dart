@@ -196,29 +196,75 @@ class ApiService {
   }
 
   // ── User ──────────────────────────────────────────────────────────────────
+
+  /// Récupère le profil courant. Tolère deux formes de réponse :
+  /// `{ "user": {...} }` ou directement `{...}`.
+  Future<Map<String, dynamic>> getMe() async {
+    final res = await get('/user/me');
+    final d = res.data;
+    if (d is Map && d['user'] is Map) {
+      return Map<String, dynamic>.from(d['user'] as Map);
+    }
+    return Map<String, dynamic>.from(d as Map);
+  }
+
+  /// Met à jour le profil (nom, whatsapp, …). Les erreurs sont propagées
+  /// pour que l'UI puisse les afficher (ne plus masquer un échec backend).
   Future<Map<String, dynamic>> updateUser(Map<String, dynamic> data) async {
-    try {
-      final res = await patch('/user/me', data: data);
-      return res.data as Map<String, dynamic>;
-    } catch (_) { return {}; }
+    final res = await patch('/user/me', data: data);
+    final d = res.data;
+    if (d is Map && d['user'] is Map) {
+      return Map<String, dynamic>.from(d['user'] as Map);
+    }
+    return d is Map ? Map<String, dynamic>.from(d) : <String, dynamic>{};
+  }
+
+  /// Envoie réellement la photo de profil en multipart (champ `photo`).
+  /// Retourne le profil mis à jour renvoyé par le backend.
+  Future<Map<String, dynamic>> uploadUserPhoto(String filePath) async {
+    final form = FormData.fromMap({
+      'photo': await MultipartFile.fromFile(filePath, filename: 'profile.jpg'),
+    });
+    final res = await _dio.post('/user/photo', data: form);
+    final d = res.data;
+    if (d is Map && d['user'] is Map) {
+      return Map<String, dynamic>.from(d['user'] as Map);
+    }
+    return d is Map ? Map<String, dynamic>.from(d) : <String, dynamic>{};
   }
 
   Future<List<dynamic>> getUserReviews() async {
     try {
       final res = await get('/user/reviews');
-      return (res.data as List?) ?? [];
+      final d = res.data;
+      if (d is Map && d['data'] is List) return d['data'] as List;
+      return (d as List?) ?? [];
     } catch (_) { return []; }
   }
 
   // ── Vehicles ──────────────────────────────────────────────────────────────
+
+  /// Liste les véhicules de l'utilisateur. Tolère `{ "data": [...] }`,
+  /// `{ "vehicles": [...] }` ou directement `[...]`.
+  Future<List<dynamic>> getVehicles() async {
+    final res = await get('/user/vehicles');
+    final d = res.data;
+    if (d is Map && d['data'] is List) return d['data'] as List;
+    if (d is Map && d['vehicles'] is List) return d['vehicles'] as List;
+    return (d as List?) ?? [];
+  }
+
+  /// Ajoute un véhicule. Les erreurs sont propagées (plus de faux succès).
   Future<Map<String, dynamic>> addVehicle(Map<String, dynamic> data) async {
-    try {
-      final res = await post('/user/vehicles', data: data);
-      return res.data as Map<String, dynamic>;
-    } catch (_) { return {}; }
+    final res = await post('/user/vehicles', data: data);
+    final d = res.data;
+    if (d is Map && d['vehicle'] is Map) {
+      return Map<String, dynamic>.from(d['vehicle'] as Map);
+    }
+    return d is Map ? Map<String, dynamic>.from(d) : <String, dynamic>{};
   }
 
   Future<void> deleteVehicle(String id) async {
-    try { await delete('/user/vehicles/$id'); } catch (_) {}
+    await delete('/user/vehicles/$id');
   }
 }

@@ -74,7 +74,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (file == null) return;
     setState(() => _photoLoading = true);
     try {
-      await ApiService.instance.updateUser({'photo_url': file.path});
+      await ApiService.instance.uploadUserPhoto(file.path);
       if (mounted) await context.read<AuthController>().refreshUser();
       if (mounted) ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Photo mise a jour')));

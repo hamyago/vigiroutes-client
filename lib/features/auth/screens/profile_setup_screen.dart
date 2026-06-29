@@ -227,10 +227,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       if (mounted) context.go('/provider/home');
                     } else {
                       await auth.completeUserProfile(
-                        name:  _nameCtrl.text.trim(),
-                        phone: _phoneCtrl.text.trim(),
+                        name:     _nameCtrl.text.trim(),
+                        whatsapp: _phoneCtrl.text.trim(),
                       );
-                      if (mounted) context.go('/user/home');
+                      if (mounted && auth.error == null) {
+                        context.go('/user/home');
+                      }
                     }
                   },
                 ),

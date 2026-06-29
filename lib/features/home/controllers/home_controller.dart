@@ -35,6 +35,7 @@ class HomeController extends ChangeNotifier {
   final _stService = ServiceTypeService.instance;
 
   LatLng?             _userPosition;
+  bool                _locationApprox = false;
   List<ProviderModel> _providers    = [];
   Set<Marker>         _markers      = {};
   String?             _serviceFilter;
@@ -43,6 +44,7 @@ class HomeController extends ChangeNotifier {
   Timer?              _refreshTimer;
 
   LatLng?                get userPosition        => _userPosition;
+  bool                   get locationApprox      => _locationApprox;
   List<ProviderModel>    get providers           => _providers;
   Set<Marker>            get markers             => _markers;
   String?                get serviceFilter       => _serviceFilter;
@@ -52,6 +54,10 @@ class HomeController extends ChangeNotifier {
   List<ServiceTypeModel> get serviceTypes        => _stService.serviceTypes;
   bool                   get servicesLoading     => _stService.isLoading;
 
+  /// Centre d'Abidjan — utilisé comme position de repli pour que la carte
+  /// s'affiche même si le GPS est refusé / coupé / trop lent.
+  static const LatLng _abidjan = LatLng(5.3599517, -4.0082563);
+
   Future<void> initialize() async {
     _isLoading = true;
     _error     = null;
@@ -60,19 +66,34 @@ class HomeController extends ChangeNotifier {
     await _stService.load();
 
     final pos = await _location.getCurrentPosition();
-    if (pos == null) {
-      _error     = 'Impossible d\'obtenir votre position GPS.';
-      _isLoading = false;
-      notifyListeners();
-      return;
+    if (pos != null) {
+      _userPosition   = LatLng(pos.latitude, pos.longitude);
+      _locationApprox = false;
+    } else {
+      // Repli : la carte doit toujours s'afficher.
+      _userPosition   = _abidjan;
+      _locationApprox = true;
     }
-
-    _userPosition = LatLng(pos.latitude, pos.longitude);
-    _isLoading    = false;
+    _isLoading = false;
     notifyListeners();
 
     await _loadProviders();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadProviders());
+    _refreshTimer ??=
+        Timer.periodic(const Duration(seconds: 30), (_) => _loadProviders());
+  }
+
+  /// Relance la détection GPS (bouton « ma position »). Retourne la nouvelle
+  /// position si obtenue, sinon null.
+  Future<LatLng?> refreshLocation() async {
+    final pos = await _location.getCurrentPosition();
+    if (pos != null) {
+      _userPosition   = LatLng(pos.latitude, pos.longitude);
+      _locationApprox = false;
+      notifyListeners();
+      await _loadProviders();
+      return _userPosition;
+    }
+    return null;
   }
 
   void setServiceFilter(String? id) {

@@ -27,6 +27,17 @@ class AuthController extends ChangeNotifier {
   String?    get role       => _user != null ? 'user' : null;
   bool       get otpSent    => _verificationId != null;
 
+  /// Vrai quand l'utilisateur est connecté mais n'a pas encore renseigné
+  /// son nom (nouveau compte). Sert à l'envoyer vers l'écran de création
+  /// de profil après l'OTP.
+  bool get needsProfileSetup {
+    final n = _user?.name.trim() ?? '';
+    if (n.isEmpty) return true;
+    if (n.toLowerCase() == 'utilisateur') return true;
+    if (n == (_user?.phone ?? '')) return true;
+    return false;
+  }
+
   AuthController() {
     _init();
     _api.onUnauthorized = () {
@@ -174,12 +185,23 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> completeUserProfile(
-      {required String name, required String phone}) async {
+      {required String name, String? whatsapp}) async {
     _isLoading = true;
     _error     = null;
     notifyListeners();
-    final u = _firebaseAuth.currentUser;
-    if (u != null) await _refreshUser(u, name: name, phone: phone);
+    try {
+      await _api.updateUser({
+        'name': name,
+        if (whatsapp != null && whatsapp.isNotEmpty) 'whatsapp': whatsapp,
+      });
+      await refreshUser(); // GET /user/me → _user à jour, state authenticated
+    } catch (e) {
+      debugPrint('[Auth] completeUserProfile: $e');
+      _error = 'Impossible d\'enregistrer le profil. Réessayez.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> completeProviderProfile({
@@ -190,9 +212,19 @@ class AuthController extends ChangeNotifier {
     required double longitude,
   }) async {}
 
+  /// Recharge le profil depuis GET /user/me (sans repasser par le login,
+  /// pour ne pas risquer d'écraser des champs). Propage l'erreur afin que
+  /// les écrans appelants puissent l'afficher.
   Future<void> refreshUser() async {
-    final u = _firebaseAuth.currentUser;
-    if (u != null) await _refreshUser(u);
+    try {
+      final data = await _api.getMe();
+      _user  = UserModel.fromJson(data);
+      _state = AuthState.authenticated;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Auth] refreshUser error: $e');
+      rethrow;
+    }
   }
 
   Future<void> logout() async {

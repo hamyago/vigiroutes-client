@@ -49,10 +49,18 @@ class UserProfileScreen extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.star, color: Colors.amber, size: 18),
+                      Icon(
+                        (user?.ratingCount ?? 0) > 0
+                            ? Icons.star
+                            : Icons.star_border,
+                        color: Colors.amber,
+                        size: 18,
+                      ),
                       const SizedBox(width: 4),
                       Text(
-                        '${(user?.rating ?? 5.0).toStringAsFixed(1) ?? '5.0'} — ${user?.totalInterventions ?? 0} intervention(s)',
+                        (user?.ratingCount ?? 0) > 0
+                            ? '${(user?.rating ?? 0).toStringAsFixed(1)} · ${user?.ratingCount} avis prestataire(s)'
+                            : 'Pas encore noté',
                         style: const TextStyle(fontSize: 13),
                       ),
                     ],
@@ -291,8 +299,7 @@ class _PhotoAvatarState extends State<_PhotoAvatar> {
 
   Future<void> _pickPhoto() async {
     final auth = context.read<AuthController>();
-    final uid = widget.isProvider ? null /* provider */?.id : auth.user?.id;
-    if (uid == null) return;
+    if (auth.user?.id == null) return;
 
     final picker = ImagePicker();
     final source = await showModalBottomSheet<ImageSource>(
@@ -324,13 +331,9 @@ class _PhotoAvatarState extends State<_PhotoAvatar> {
 
     setState(() => _loading = true);
     try {
-      final bytes = await file.readAsBytes();
-      await ApiService.instance.updateUser({'photo': 'uploaded'});
-      if (widget.isProvider) {
-        // Photo mise à jour via updateUser
-      } else {
-        await auth.completeUserProfile(name: "", phone: "");
-      }
+      // Envoi RÉEL de l'image en multipart, puis rafraîchissement du profil.
+      await ApiService.instance.uploadUserPhoto(file.path);
+      if (mounted) await context.read<AuthController>().refreshUser();
       setState(() => _cacheKey = DateTime.now().millisecondsSinceEpoch);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

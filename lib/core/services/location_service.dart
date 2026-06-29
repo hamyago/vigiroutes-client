@@ -31,12 +31,21 @@ class LocationService {
         return null;
       }
 
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
-        ),
-      );
+      // Acquisition GPS avec délai large ; en cas de timeout on retombe
+      // sur la dernière position connue (instantanée) si elle existe.
+      Position pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 20),
+          ),
+        );
+      } catch (_) {
+        final last = await Geolocator.getLastKnownPosition();
+        if (last == null) return null;
+        pos = last;
+      }
       return LocationData(latitude: pos.latitude, longitude: pos.longitude, accuracy: pos.accuracy);
     } catch (e) {
       debugPrint('[Location] error: $e');
