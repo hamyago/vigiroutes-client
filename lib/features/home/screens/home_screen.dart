@@ -102,11 +102,20 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                           const Icon(Icons.search,
                               color: AppColors.textMuted, size: 20),
                           const SizedBox(width: 8),
-                          Text(
-                            'Trouver un prestataire...',
-                            style: TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 14,
+                          Expanded(
+                            child: TextField(
+                              onChanged: ctrl.setSearchQuery,
+                              textInputAction: TextInputAction.search,
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                border: InputBorder.none,
+                                hintText: 'Trouver un prestataire...',
+                                hintStyle: TextStyle(
+                                  color: AppColors.textMuted,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              style: const TextStyle(fontSize: 14),
                             ),
                           ),
                         ],
@@ -253,7 +262,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     child: Row(
                       children: [
                         Text(
-                          '${ctrl.providers.length} prestataire(s) à proximité',
+                          '${ctrl.visibleProviders.length} prestataire(s) à proximité',
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 15,
@@ -270,17 +279,17 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     ),
                   ),
                   Expanded(
-                    child: ctrl.providers.isEmpty && !ctrl.isLoading
+                    child: ctrl.visibleProviders.isEmpty && !ctrl.isLoading
                         ? _EmptyProviders()
                         : ListView.builder(
                             controller: scrollCtrl,
                             padding:
                                 const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: ctrl.providers.length,
+                            itemCount: ctrl.visibleProviders.length,
                             itemBuilder: (_, i) => _ProviderTile(
-                              provider: ctrl.providers[i],
+                              provider: ctrl.visibleProviders[i],
                               onTap: () => context.push('/user/request',
-                                  extra: ctrl.providers[i]),
+                                  extra: ctrl.visibleProviders[i]),
                             ),
                           ),
                   ),

@@ -47,6 +47,21 @@ class HomeController extends ChangeNotifier {
   bool                   get locationApprox      => _locationApprox;
   List<ProviderModel>    get providers           => _providers;
   Set<Marker>            get markers             => _markers;
+
+  // Recherche par nom (barre de recherche de la carte)
+  String _search = '';
+  String get search => _search;
+  void setSearchQuery(String q) {
+    _search = q;
+    notifyListeners();
+  }
+
+  /// Prestataires réellement affichés dans la liste (après filtre de recherche).
+  List<ProviderModel> get visibleProviders {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return _providers;
+    return _providers.where((p) => p.name.toLowerCase().contains(q)).toList();
+  }
   String?                get serviceFilter       => _serviceFilter;
   String?                get selectedServiceFilter => _serviceFilter;
   bool                   get isLoading           => _isLoading;
