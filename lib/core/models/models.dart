@@ -1,3 +1,18 @@
+// Conversions tolérantes : les API Laravel renvoient souvent les décimaux
+// (latitude, rating, etc.) sous forme de CHAÎNES. On accepte String OU nombre.
+double _toDouble(dynamic v) {
+  if (v == null) return 0;
+  if (v is num) return v.toDouble();
+  return double.tryParse(v.toString()) ?? 0;
+}
+
+int _toInt(dynamic v) {
+  if (v == null) return 0;
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  return int.tryParse(v.toString()) ?? 0;
+}
+
 // ── UserModel ─────────────────────────────────────────────────────────────────
 
 class UserModel {
@@ -107,18 +122,20 @@ class ProviderModel {
         phone:              json['phone'] as String? ?? '',
         photoUrl:           json['photo_url'] as String?,
         fcmToken:           json['fcm_token'] as String?,
-        latitude:           (json['latitude'] as num?)?.toDouble() ?? 0,
-        longitude:          (json['longitude'] as num?)?.toDouble() ?? 0,
+        latitude:           _toDouble(json['latitude']),
+        longitude:          _toDouble(json['longitude']),
         isAvailable:        json['is_available'] as bool? ?? true,
         isActive:           json['is_active'] as bool? ?? true,
         isVerified:         json['is_verified'] as bool? ?? false,
         serviceTypes:       (json['service_types'] as List?)
                                 ?.map((e) => e as String).toList() ?? [],
-        rating:             (json['rating'] as num?)?.toDouble() ?? 0,
-        ratingCount:        json['rating_count'] as int? ?? 0,
-        totalEarnings:      (json['total_earnings'] as num?)?.toDouble() ?? 0,
-        totalInterventions: json['total_interventions'] as int? ?? 0,
-        distanceKm:         (json['distance_km'] as num?)?.toDouble(),
+        rating:             _toDouble(json['rating']),
+        ratingCount:        _toInt(json['rating_count']),
+        totalEarnings:      _toDouble(json['total_earnings']),
+        totalInterventions: _toInt(json['total_interventions']),
+        distanceKm:         json['distance_km'] == null
+                                ? null
+                                : _toDouble(json['distance_km']),
       );
 }
 
