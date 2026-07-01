@@ -8,6 +8,7 @@ import '../../features/auth/screens/phone_auth_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
 import '../../features/auth/screens/profile_setup_screen.dart';
 import '../../features/home/screens/home_screen.dart';
+import '../../features/home/screens/action_choice_screen.dart';
 import '../../features/home/controllers/home_controller.dart';
 import '../../features/history/screens/history_screen.dart' as hist;
 import '../../features/profile/screens/profile_screen.dart';
@@ -32,20 +33,19 @@ class UserShell extends StatefulWidget {
 
 class _UserShellState extends State<UserShell> {
   int _idx = 0;
-  static const _routes = ['/user/home', '/user/history', '/user/profile'];
+  static const _routes = ['/user/home', '/user/profile'];
 
   @override
   Widget build(BuildContext context) => Scaffold(
         body: widget.child,
-        floatingActionButton: FloatingActionButton.extended(
-          heroTag: 'sos_fab',
-          onPressed: () => context.push('/user/emergency'),
-          backgroundColor: const Color(0xFFE53E3E),
+        floatingActionButton: FloatingActionButton(
+          heroTag: 'action_fab',
+          onPressed: () => context.push('/user/action'),
+          backgroundColor: const Color(0xFFFF6B35),
           elevation: 6,
-          icon: const Icon(Icons.emergency, color: Colors.white, size: 20),
-          label: const Text('SOS',
-              style: TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w800)),
+          shape: const CircleBorder(),
+          child: const Icon(Icons.support_agent,
+              color: Colors.white, size: 30),
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         bottomNavigationBar: BottomAppBar(
@@ -68,23 +68,13 @@ class _UserShellState extends State<UserShell> {
               const SizedBox(width: 80),
               Expanded(
                   child: _NavItem(
-                      icon: Icons.history_outlined,
-                      activeIcon: Icons.history,
-                      label: 'Historique',
+                      icon: Icons.person_outline,
+                      activeIcon: Icons.person,
+                      label: 'Profil',
                       isActive: _idx == 1,
                       onTap: () {
                         setState(() => _idx = 1);
                         context.go(_routes[1]);
-                      })),
-              Expanded(
-                  child: _NavItem(
-                      icon: Icons.person_outline,
-                      activeIcon: Icons.person,
-                      label: 'Profil',
-                      isActive: _idx == 2,
-                      onTap: () {
-                        setState(() => _idx = 2);
-                        context.go(_routes[2]);
                       })),
             ]),
           ),
@@ -182,6 +172,9 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
           ],
         ),
 
+        GoRoute(
+            path: '/user/action',
+            builder: (_, __) => const ActionChoiceScreen()),
         GoRoute(
             path: '/user/request',
             builder: (ctx, s) => ChangeNotifierProvider(

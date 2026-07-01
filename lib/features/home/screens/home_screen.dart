@@ -190,44 +190,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             ),
           ),
 
-          // ── Bouton Dépannage (jaune) ──────────────────────────────────────
-          Positioned(
-            bottom: MediaQuery.of(context).size.height * 0.28 + 16,
-            right: 16,
-            child: GestureDetector(
-              onTap: () => context.push('/user/request'),
-              child: Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFD600),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFD600).withValues(alpha: 0.5),
-                      blurRadius: 20,
-                      spreadRadius: 4,
-                    ),
-                  ],
-                ),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('🆘', style: TextStyle(fontSize: 24)),
-                    Text(
-                      'Dépannage',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
           // ── Recenter button ───────────────────────────────────────────────
           Positioned(
             bottom: MediaQuery.of(context).size.height * 0.28 + 16,
