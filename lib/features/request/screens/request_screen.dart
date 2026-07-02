@@ -415,6 +415,31 @@ class _ConfirmStep extends StatelessWidget {
     final auth     = context.watch<AuthController>();
     final estimate = ctrl.estimate;
 
+    if (ctrl.estimateLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (ctrl.error != null && estimate == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: AppColors.error, size: 48),
+              const SizedBox(height: 12),
+              Text(ctrl.error!, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => ctrl.refreshEstimate(auth.user),
+                child: const Text('Réessayer'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(

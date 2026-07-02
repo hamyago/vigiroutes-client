@@ -78,23 +78,33 @@ class HomeController extends ChangeNotifier {
     _error     = null;
     notifyListeners();
 
-    await _stService.load();
+    try {
+      await _stService.load();
 
-    final pos = await _location.getCurrentPosition();
-    if (pos != null) {
-      _userPosition   = LatLng(pos.latitude, pos.longitude);
-      _locationApprox = false;
-    } else {
-      // Repli : la carte doit toujours s'afficher.
+      final pos = await _location.getCurrentPosition();
+      if (pos != null) {
+        _userPosition   = LatLng(pos.latitude, pos.longitude);
+        _locationApprox = false;
+      } else {
+        // Repli : la carte doit toujours s'afficher.
+        _userPosition   = _abidjan;
+        _locationApprox = true;
+      }
+      _isLoading = false;
+      notifyListeners();
+
+      await _loadProviders();
+      _refreshTimer ??=
+          Timer.periodic(const Duration(seconds: 30), (_) => _loadProviders());
+    } catch (e) {
+      // Filet de sécurité : ne doit jamais laisser l'écran figé sur un
+      // spinner indéfiniment sans retour possible.
+      debugPrint('[HomeController] initialize error: $e');
       _userPosition   = _abidjan;
       _locationApprox = true;
+      _isLoading      = false;
+      notifyListeners();
     }
-    _isLoading = false;
-    notifyListeners();
-
-    await _loadProviders();
-    _refreshTimer ??=
-        Timer.periodic(const Duration(seconds: 30), (_) => _loadProviders());
   }
 
   /// Relance la détection GPS (bouton « ma position »). Retourne la nouvelle

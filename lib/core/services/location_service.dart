@@ -11,16 +11,45 @@ class LocationData {
 
 class LocationService {
   Future<LocationData?> getCurrentPosition() async {
+    // Filet de sécurité global : quoi qu'il arrive, cette méthode ne doit
+    // JAMAIS bloquer l'app indéfiniment (vécu en prod : écran figé sur un
+    // spinner plusieurs minutes sans jamais s'arrêter).
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      return await _getCurrentPositionInternal()
+          .timeout(const Duration(seconds: 45), onTimeout: () {
+        debugPrint('[Location] getCurrentPosition: timeout global (45s)');
+        return null;
+      });
+    } catch (e) {
+      debugPrint('[Location] getCurrentPosition: erreur inattendue: $e');
+      return null;
+    }
+  }
+
+  Future<LocationData?> _getCurrentPositionInternal() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled()
+          .timeout(const Duration(seconds: 10), onTimeout: () => false);
       if (!serviceEnabled) {
         debugPrint('[Location] GPS desactive');
         return null;
       }
 
-      LocationPermission permission = await Geolocator.checkPermission();
+      LocationPermission permission = await Geolocator.checkPermission()
+          .timeout(const Duration(seconds: 15), onTimeout: () {
+        debugPrint('[Location] checkPermission timeout');
+        return LocationPermission.denied;
+      });
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+        permission = await Geolocator.requestPermission()
+            .timeout(const Duration(seconds: 25), onTimeout: () {
+          // La popup système d'autorisation peut rester bloquée sans jamais
+          // se résoudre (bug Android connu, surtout juste après une
+          // transition d'écran) — sans ce timeout, l'app reste figée à
+          // l'infini sur un spinner sans erreur visible.
+          debugPrint('[Location] requestPermission timeout — popup système bloquée ?');
+          return LocationPermission.denied;
+        });
         if (permission == LocationPermission.denied) {
           debugPrint('[Location] Permission refusee');
           return null;
@@ -42,7 +71,8 @@ class LocationService {
           ),
         );
       } catch (_) {
-        final last = await Geolocator.getLastKnownPosition();
+        final last = await Geolocator.getLastKnownPosition()
+            .timeout(const Duration(seconds: 10), onTimeout: () => null);
         if (last == null) return null;
         pos = last;
       }

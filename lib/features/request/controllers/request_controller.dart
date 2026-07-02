@@ -47,24 +47,50 @@ class RequestController extends ChangeNotifier {
     _submitError = SubmitError.none;
     _error       = null;
     _estimate    = null;
-
-    // Charger les service types si pas encore chargés
-    await ServiceTypeService.instance.load();
-
-    final pos = await _location.getCurrentPosition();
-    if (pos != null) {
-      _userPosition = LatLng(pos.latitude, pos.longitude);
-      _userAddress  = await _location.getAddressFromCoords(
-          pos.latitude, pos.longitude);
-    }
-    if (preselectedProvider != null) _selectedProvider = preselectedProvider;
     notifyListeners();
+
+    try {
+      // Charger les service types si pas encore chargés (avec filet de
+      // sécurité : ne doit jamais bloquer l'écran indéfiniment).
+      await ServiceTypeService.instance
+          .load()
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        debugPrint('[RequestController] ServiceTypeService.load() timeout');
+      });
+
+      final pos = await _location.getCurrentPosition();
+      if (pos != null) {
+        _userPosition = LatLng(pos.latitude, pos.longitude);
+        _userAddress  = await _location.getAddressFromCoords(
+            pos.latitude, pos.longitude);
+      }
+
+      // Le prestataire est déjà choisi (ex: clic sur sa carte depuis la
+      // carte/liste d'accueil) ; il reste à choisir le SERVICE souhaité —
+      // voir selectService() qui saute alors directement à la confirmation
+      // au lieu de redemander de choisir un prestataire.
+      if (preselectedProvider != null) _selectedProvider = preselectedProvider;
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[RequestController] initialize error: $e');
+      _error = 'Impossible de charger les informations. Réessayez.';
+      notifyListeners();
+    }
   }
 
   void selectService(ServiceTypeModel service) {
     _selectedService = service;
-    _step = RequestStep.selectProvider;
-    notifyListeners();
+    if (_selectedProvider != null) {
+      // Prestataire déjà choisi (préselection) : on saute directement à la
+      // confirmation au lieu de redemander de choisir un prestataire.
+      _step = RequestStep.confirm;
+      notifyListeners();
+      _loadEstimate();
+    } else {
+      _step = RequestStep.selectProvider;
+      notifyListeners();
+    }
   }
 
   Future<void> selectProvider(ProviderModel provider) async {
@@ -74,20 +100,30 @@ class RequestController extends ChangeNotifier {
     await _loadEstimate();
   }
 
+  bool _estimateLoading = false;
+  bool get estimateLoading => _estimateLoading;
+
   Future<void> _loadEstimate() async {
     if (_selectedService == null ||
         _selectedProvider == null ||
         _userPosition == null) return;
+    _estimateLoading = true;
+    _error           = null;
+    notifyListeners();
     try {
       _estimate = await _api.getEstimate(
         serviceTypeId: _selectedService!.id,
         providerId:    _selectedProvider!.id,
         userLat:       _userPosition!.latitude,
         userLng:       _userPosition!.longitude,
-      );
+      ).timeout(const Duration(seconds: 30));
+      _estimateLoading = false;
       notifyListeners();
     } catch (e) {
       debugPrint('[RequestController] Erreur devis : $e');
+      _estimateLoading = false;
+      _error = 'Impossible de calculer le devis. Réessayez.';
+      notifyListeners();
     }
   }
 
