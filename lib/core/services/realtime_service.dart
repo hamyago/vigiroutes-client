@@ -39,6 +39,15 @@ class RealtimeService {
       );
 
       _channel = WebSocketChannel.connect(uri);
+
+      // BUG CORRIGÉ : WebSocketChannel.connect() ne lève PAS l'échec de
+      // connexion (DNS, hôte injoignable, etc.) de façon fiable via
+      // stream.listen(onError: ...) — problème connu du package. Sans ce
+      // `await ... .ready`, une simple coupure réseau/DNS remontait comme
+      // exception non rattrapée jusqu'au gestionnaire d'erreur global de
+      // l'app (même bug identifié et corrigé côté vigiroutesPro).
+      await _channel!.ready;
+
       _connected = true;
 
       _channel!.stream.listen(
@@ -53,6 +62,7 @@ class RealtimeService {
       debugPrint('[WS] Connecté à Reverb');
     } catch (e) {
       debugPrint('[WS] Erreur connexion : $e');
+      _connected = false;
       _scheduleReconnect();
     }
   }
