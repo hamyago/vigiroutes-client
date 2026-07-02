@@ -38,14 +38,18 @@ class _UserShellState extends State<UserShell> {
   @override
   Widget build(BuildContext context) => Scaffold(
         body: widget.child,
-        floatingActionButton: FloatingActionButton(
-          heroTag: 'action_fab',
-          onPressed: () => context.push('/user/action'),
-          backgroundColor: const Color(0xFFFF6B35),
-          elevation: 6,
-          shape: const CircleBorder(),
-          child: const Icon(Icons.support_agent,
-              color: Colors.white, size: 30),
+        floatingActionButton: SizedBox(
+          width: 72,
+          height: 72,
+          child: FloatingActionButton(
+            heroTag: 'action_fab',
+            onPressed: () => context.push('/user/action'),
+            backgroundColor: const Color(0xFFFF6B35),
+            elevation: 6,
+            shape: const CircleBorder(),
+            child: const Icon(Icons.support_agent,
+                color: Colors.white, size: 38),
+          ),
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         bottomNavigationBar: BottomAppBar(
@@ -65,7 +69,7 @@ class _UserShellState extends State<UserShell> {
                         setState(() => _idx = 0);
                         context.go(_routes[0]);
                       })),
-              const SizedBox(width: 80),
+              const SizedBox(width: 88),
               Expanded(
                   child: _NavItem(
                       icon: Icons.person_outline,
