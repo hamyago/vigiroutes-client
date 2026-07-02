@@ -402,6 +402,11 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, color, icon) = switch (status) {
       'pending' => ('En attente d\'acceptation', AppColors.warning, '⏳'),
+      // 'dispatching' : le backend a envoye la demande a un prestataire
+      // precis et attend sa reponse (ajoute suite au correctif du dispatch
+      // direct — ce statut n'existait pas cote client avant, d'ou l'affichage
+      // "? Inconnu" observe juste apres qu'un client ait lance une demande).
+      'dispatching' => ('Envoyée au prestataire...', AppColors.warning, '📨'),
       'accepted' => ('Prestataire en route', AppColors.primary, '🚗'),
       'in_progress' => ('Intervention en cours', AppColors.success, '🔧'),
       'completed' => ('Terminée', AppColors.success, '✅'),
