@@ -101,7 +101,29 @@ class _SelectServiceStep extends StatelessWidget {
       );
     }
 
-    final services = stService.serviceTypes;
+    final all = stService.serviceTypes;
+    // Si un prestataire est présélectionné (tapé sur la carte), on ne
+    // propose QUE ses propres services, pas tout le catalogue.
+    final prov = ctrl.selectedProvider;
+    final services = (prov != null && prov.serviceTypes.isNotEmpty)
+        ? all
+            .where((s) =>
+                prov.serviceTypes.contains(s.slug) ||
+                prov.serviceTypes.contains(s.id))
+            .toList()
+        : all;
+
+    if (services.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            "Ce prestataire n'a pas encore renseigné ses services.",
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
