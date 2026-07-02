@@ -177,7 +177,7 @@ class RequestController extends ChangeNotifier {
         'user_longitude':    _userPosition!.longitude,
         'user_address':      _userAddress,
         'payment_method':    _paymentMethod,
-      });
+      }).timeout(const Duration(seconds: 30));
 
       _createdInterventionId = data['id'] as String;
       _isLoading = false;

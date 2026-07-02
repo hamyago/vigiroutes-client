@@ -24,10 +24,21 @@ class _TrackingScreenState extends State<TrackingScreen> {
   GoogleMapController? _mapCtrl;
   InterventionModel? _intervention;
   StreamSubscription? _sub;
+  bool _loadError = false;
 
   @override
   void initState() {
     super.initState();
+
+    // BUG CORRIGÉ : cet écran ne dépendait QUE du WebSocket pour remplir
+    // _intervention, qui ne pousse que les CHANGEMENTS futurs (pas
+    // d'instantané initial à l'abonnement — comportement normal de
+    // Reverb/Pusher). Juste après la création d'une demande, tant que le
+    // prestataire n'a rien accepté, il n'y a rien à recevoir : le spinner
+    // restait bloqué indéfiniment. On charge maintenant l'état initial via
+    // l'API REST, puis le WebSocket prend le relais pour le temps réel.
+    _loadInitial();
+
     _sub = RealtimeService.instance
         .subscribeToIntervention(widget.interventionId).listen((data) {
       final i = InterventionModel.fromJson(data);
@@ -42,6 +53,20 @@ class _TrackingScreenState extends State<TrackingScreen> {
         );
       }
     });
+  }
+
+  Future<void> _loadInitial() async {
+    try {
+      final data = await _db
+          .getIntervention(widget.interventionId)
+          .timeout(const Duration(seconds: 30));
+      if (mounted) {
+        setState(() => _intervention = InterventionModel.fromJson(data));
+      }
+    } catch (e) {
+      debugPrint('[TrackingScreen] Erreur chargement initial : $e');
+      if (mounted) setState(() => _loadError = true);
+    }
   }
 
   @override
@@ -188,7 +213,28 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 ],
               ),
               child: i == null
-                  ? const Center(child: CircularProgressIndicator())
+                  ? (_loadError
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.error_outline,
+                                color: AppColors.error, size: 40),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Impossible de charger le suivi de la demande.',
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() => _loadError = false);
+                                _loadInitial();
+                              },
+                              child: const Text('Réessayer'),
+                            ),
+                          ],
+                        )
+                      : const Center(child: CircularProgressIndicator()))
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
