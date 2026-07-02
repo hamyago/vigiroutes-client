@@ -1,3 +1,4 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../core/models/models.dart';
@@ -50,20 +51,26 @@ class RequestController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      FirebaseCrashlytics.instance.log('[RequestController] initialize: debut');
+
       // Charger les service types si pas encore chargés (avec filet de
       // sécurité : ne doit jamais bloquer l'écran indéfiniment).
       await ServiceTypeService.instance
           .load()
           .timeout(const Duration(seconds: 30), onTimeout: () {
         debugPrint('[RequestController] ServiceTypeService.load() timeout');
+        FirebaseCrashlytics.instance.log('[RequestController] ServiceTypeService.load() TIMEOUT 30s');
       });
+      FirebaseCrashlytics.instance.log('[RequestController] initialize: ServiceTypeService.load() ok');
 
       final pos = await _location.getCurrentPosition();
+      FirebaseCrashlytics.instance.log('[RequestController] initialize: getCurrentPosition() ok (pos=${pos != null})');
       if (pos != null) {
         _userPosition = LatLng(pos.latitude, pos.longitude);
         _userAddress  = await _location.getAddressFromCoords(
             pos.latitude, pos.longitude);
       }
+      FirebaseCrashlytics.instance.log('[RequestController] initialize: fin (avant notifyListeners)');
 
       // Le prestataire est déjà choisi (ex: clic sur sa carte depuis la
       // carte/liste d'accueil) ; il reste à choisir le SERVICE souhaité —
@@ -74,6 +81,7 @@ class RequestController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('[RequestController] initialize error: $e');
+      FirebaseCrashlytics.instance.log('[RequestController] initialize EXCEPTION: $e');
       _error = 'Impossible de charger les informations. Réessayez.';
       notifyListeners();
     }
@@ -110,6 +118,7 @@ class RequestController extends ChangeNotifier {
     _estimateLoading = true;
     _error           = null;
     notifyListeners();
+    FirebaseCrashlytics.instance.log('[RequestController] _loadEstimate: appel API getEstimate');
     try {
       _estimate = await _api.getEstimate(
         serviceTypeId: _selectedService!.id,
@@ -118,9 +127,11 @@ class RequestController extends ChangeNotifier {
         userLng:       _userPosition!.longitude,
       ).timeout(const Duration(seconds: 30));
       _estimateLoading = false;
+      FirebaseCrashlytics.instance.log('[RequestController] _loadEstimate: succes');
       notifyListeners();
     } catch (e) {
       debugPrint('[RequestController] Erreur devis : $e');
+      FirebaseCrashlytics.instance.log('[RequestController] _loadEstimate EXCEPTION: $e');
       _estimateLoading = false;
       _error = 'Impossible de calculer le devis. Réessayez.';
       notifyListeners();

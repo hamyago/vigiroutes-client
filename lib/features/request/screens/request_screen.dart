@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -31,14 +33,76 @@ class RequestScreen extends StatefulWidget {
 }
 
 class _RequestScreenState extends State<RequestScreen> {
+  Timer? _watchdog;
+  bool  _postFrameFired = false;
+  bool  _initializeDone = false;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<RequestController>().initialize(
+
+    FirebaseCrashlytics.instance.log(
+        'RequestScreen.initState provider=${widget.preselectedProvider?.id ?? "aucun"}');
+
+    // Watchdog : si rien ne s'est passé après 20s (ni position, ni erreur,
+    // ni même le postFrame déclenché), on force un rapport Crashlytics
+    // non-fatal avec tout le contexte utile — pour diagnostiquer un
+    // blocage à distance, sans câble ni flutter run.
+    _watchdog = Timer(const Duration(seconds: 20), _reportIfStuck);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _postFrameFired = true;
+      FirebaseCrashlytics.instance.log('RequestScreen: appel ctrl.initialize()');
+      await context.read<RequestController>().initialize(
             preselectedProvider: widget.preselectedProvider,
           );
+      _initializeDone = true;
+      FirebaseCrashlytics.instance.log('RequestScreen: ctrl.initialize() terminé');
+      _watchdog?.cancel();
     });
+  }
+
+  void _reportIfStuck() {
+    if (!mounted) return;
+    final ctrl = context.read<RequestController>();
+
+    final String reason;
+    if (!_postFrameFired) {
+      reason = 'addPostFrameCallback jamais déclenché (le widget n\'a peut-être '
+          'jamais fini de se construire)';
+    } else if (!_initializeDone) {
+      reason = 'ctrl.initialize() appelé mais jamais terminé après 20s '
+          '(bloqué dans ServiceTypeService.load, getCurrentPosition, ou ailleurs '
+          'malgré les timeouts internes)';
+    } else if (ctrl.userPosition == null && ctrl.error == null) {
+      reason = 'initialize() terminé mais userPosition et error restent null';
+    } else {
+      return; // Tout va bien, rien à signaler.
+    }
+
+    FirebaseCrashlytics.instance.recordError(
+      Exception('RequestScreen bloqué 20s+ : $reason'),
+      StackTrace.current,
+      fatal: false,
+      information: [
+        'preselectedProvider: ${widget.preselectedProvider?.id ?? "aucun"} '
+            '(${widget.preselectedProvider?.name ?? ""})',
+        'postFrameFired: $_postFrameFired',
+        'initializeDone: $_initializeDone',
+        'step: ${ctrl.step}',
+        'userPosition: ${ctrl.userPosition}',
+        'error: ${ctrl.error}',
+        'selectedService: ${ctrl.selectedService?.id}',
+        'selectedProvider: ${ctrl.selectedProvider?.id}',
+        'estimateLoading: ${ctrl.estimateLoading}',
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _watchdog?.cancel();
+    super.dispose();
   }
 
   @override
