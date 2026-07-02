@@ -294,16 +294,39 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
     _loadProviders();
   }
 
+  bool _noPosition = false;
+
   Future<void> _loadProviders() async {
     final pos       = widget.ctrl.userPosition;
     final serviceId = widget.ctrl.selectedService?.id;
-    if (pos == null) return;
+    if (pos == null) {
+      // BUG CORRIGÉ : avant, un simple `return` laissait _loading=true pour
+      // toujours (spinner infini, silencieux, sans erreur ni exception —
+      // donc invisible pour Crashlytics). Cas réel : GPS désactivé,
+      // permission refusée, ou position jamais obtenue lors de
+      // l'initialisation, mais l'utilisateur a quand même pu avancer
+      // jusqu'à cet écran.
+      FirebaseCrashlytics.instance.recordError(
+        Exception('_SelectProviderStep: userPosition null, impossible de charger les prestataires'),
+        StackTrace.current,
+        fatal: false,
+      );
+      if (mounted) setState(() {
+        _loading     = false;
+        _noPosition  = true;
+      });
+      return;
+    }
+    if (mounted) setState(() {
+      _loading    = true;
+      _noPosition = false;
+    });
     try {
       final data = await ApiService.instance.getNearbyProviders(
         latitude:      pos.latitude,
         longitude:     pos.longitude,
         serviceTypeId: serviceId,
-      );
+      ).timeout(const Duration(seconds: 30));
       if (mounted) setState(() {
         _providers = data
             .map((e) => ProviderModel.fromJson(e as Map<String, dynamic>))
@@ -311,6 +334,7 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
         _loading = false;
       });
     } catch (e) {
+      FirebaseCrashlytics.instance.log('[_SelectProviderStep] getNearbyProviders erreur: $e');
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -332,7 +356,34 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
       Expanded(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _providers.isEmpty
+            : _noPosition
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.location_off,
+                              color: AppColors.error, size: 48),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Impossible d\'obtenir votre position.\n'
+                            'Vérifiez que le GPS est activé et que '
+                            'l\'autorisation de localisation est accordée '
+                            'à VigiRoutes.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.textSecondary),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: _loadProviders,
+                            child: const Text('Réessayer'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : _providers.isEmpty
                 ? const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
