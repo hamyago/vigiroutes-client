@@ -6,6 +6,12 @@ double _toDouble(dynamic v) {
   return double.tryParse(v.toString()) ?? 0;
 }
 
+double? _toDoubleOrNull(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v.toDouble();
+  return double.tryParse(v.toString());
+}
+
 int _toInt(dynamic v) {
   if (v == null) return 0;
   if (v is int) return v;
@@ -69,9 +75,9 @@ class UserModel {
         subscriptionExpiresAt: json['subscription_expires_at'] != null
             ? DateTime.parse(json['subscription_expires_at'] as String)
             : null,
-        totalInterventions:    json['total_interventions'] as int? ?? 0,
-        rating:                (json['rating'] as num?)?.toDouble() ?? 5.0,
-        ratingCount:           json['rating_count'] as int? ?? 0,
+        totalInterventions:    _toInt(json['total_interventions']),
+        rating:                json['rating'] == null ? 5.0 : _toDouble(json['rating']),
+        ratingCount:           _toInt(json['rating_count']),
         vehicles:              (json['vehicles'] as List<dynamic>?) ?? [],
         whatsapp:              json['whatsapp'] as String?,
       );
@@ -208,14 +214,14 @@ class InterventionModel {
       serviceTypeId:    json['service_type_id'] as String? ?? '',
       serviceTypeName:  json['service_type_name'] as String? ?? '',
       status:           json['status'] as String? ?? 'pending',
-      userLatitude:     (json['user_latitude'] as num?)?.toDouble() ?? 0,
-      userLongitude:    (json['user_longitude'] as num?)?.toDouble() ?? 0,
+      userLatitude:     _toDouble(json['user_latitude']),
+      userLongitude:    _toDouble(json['user_longitude']),
       userAddress:      json['user_address'] as String?,
-      providerLatitude: (json['provider_latitude'] as num?)?.toDouble(),
-      providerLongitude:(json['provider_longitude'] as num?)?.toDouble(),
-      distanceKm:       (json['distance_km'] as num?)?.toDouble() ?? 0,
-      totalPrice:       (json['total_price'] as num?)?.toDouble() ?? 0,
-      commission:       (json['commission'] as num?)?.toDouble() ?? 0,
+      providerLatitude: _toDoubleOrNull(json['provider_latitude']),
+      providerLongitude:_toDoubleOrNull(json['provider_longitude']),
+      distanceKm:       _toDouble(json['distance_km']),
+      totalPrice:       _toDouble(json['total_price']),
+      commission:       _toDouble(json['commission']),
       paymentMethod:    json['payment_method'] as String? ?? 'cash',
       paymentStatus:    json['payment_status'] as String? ?? 'pending',
       provider: providerJson != null ? ProviderModel.fromJson(providerJson) : null,
@@ -272,7 +278,7 @@ class ReviewModel {
         interventionId: json['intervention_id'] as String,
         userId:         json['user_id'] as String,
         providerId:     json['provider_id'] as String,
-        rating:         (json['rating'] as num).toDouble(),
+        rating:         _toDouble(json['rating']),
         comment:        json['comment'] as String?,
         createdAt:      DateTime.parse(json['created_at'] as String),
       );

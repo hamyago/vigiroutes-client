@@ -11,6 +11,17 @@ import '../../../core/services/service_type_service.dart';
 import '../../../core/utils/price_calculator.dart';
 import '../../../shared/widgets/custom_button.dart';
 
+// Conversion tolérante : Laravel sérialise parfois les colonnes DECIMAL
+// (base_price, km_cost, total_price...) sous forme de CHAÎNES dans le JSON
+// plutôt que de nombres. Un cast direct `as num` plante dans ce cas
+// (« type 'String' is not a subtype of type 'num?' »). Même pattern que
+// _toDouble dans core/models/models.dart, dupliqué ici car privé au fichier.
+double _estimateNum(dynamic v) {
+  if (v == null) return 0;
+  if (v is num) return v.toDouble();
+  return double.tryParse(v.toString()) ?? 0;
+}
+
 class RequestScreen extends StatefulWidget {
   final ProviderModel? preselectedProvider;
   const RequestScreen({super.key, this.preselectedProvider});
@@ -429,18 +440,18 @@ class _ConfirmStep extends StatelessWidget {
                 _Row('👨‍🔧 Prestataire',
                     ctrl.selectedProvider?.name ?? '-'),
                 _Row('📍 Distance',
-                    '${((estimate?['distance_km'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)} km'),
+                    '${_estimateNum(estimate?['distance_km']).toStringAsFixed(1)} km'),
                 const Divider(height: 20),
                 _Row('Prix de base',
                     PriceCalculator.formatFcfa(
-                        (estimate?['base_price'] as num?)?.toDouble() ?? 0)),
+                        _estimateNum(estimate?['base_price']))),
                 _Row('Déplacement',
                     PriceCalculator.formatFcfa(
-                        (estimate?['km_cost'] as num?)?.toDouble() ?? 0)),
+                        _estimateNum(estimate?['km_cost']))),
                 const Divider(height: 20),
                 _Row('TOTAL',
                     PriceCalculator.formatFcfa(
-                        (estimate?['total_price'] as num?)?.toDouble() ?? 0),
+                        _estimateNum(estimate?['total_price'])),
                     bold: true,
                     valueColor: AppColors.primary),
               ],

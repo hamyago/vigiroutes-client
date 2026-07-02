@@ -25,5 +25,13 @@ class EmergencyAlert {
 
   Map<String,dynamic> toJson() => {'user_id':userId,'user_name':userName,'user_phone':userPhone,'type':type.key,'latitude':latitude,'longitude':longitude,'address':address,'description':description};
 
-  factory EmergencyAlert.fromJson(Map<String,dynamic> j) => EmergencyAlert(id:j['id'] as String,userId:j['user_id'] as String,userName:j['user_name'] as String? ?? '',userPhone:j['user_phone'] as String? ?? '',type:EmergencyType.fromKey(j['type'] as String? ?? 'medical'),status:EmergencyStatus.fromString(j['status'] as String? ?? 'pending'),latitude:(j['latitude'] as num).toDouble(),longitude:(j['longitude'] as num).toDouble(),address:j['address'] as String?,description:j['description'] as String?,createdAt:DateTime.parse(j['created_at'] as String));
+  factory EmergencyAlert.fromJson(Map<String,dynamic> j) => EmergencyAlert(id:j['id'] as String,userId:j['user_id'] as String,userName:j['user_name'] as String? ?? '',userPhone:j['user_phone'] as String? ?? '',type:EmergencyType.fromKey(j['type'] as String? ?? 'medical'),status:EmergencyStatus.fromString(j['status'] as String? ?? 'pending'),latitude:_num(j['latitude']),longitude:_num(j['longitude']),address:j['address'] as String?,description:j['description'] as String?,createdAt:DateTime.parse(j['created_at'] as String));
+}
+
+// Conversion tolérante : Laravel sérialise parfois les colonnes DECIMAL
+// (latitude/longitude) sous forme de chaînes plutôt que de nombres JSON.
+double _num(dynamic v) {
+  if (v == null) return 0;
+  if (v is num) return v.toDouble();
+  return double.tryParse(v.toString()) ?? 0;
 }

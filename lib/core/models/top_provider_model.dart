@@ -24,11 +24,19 @@ class TopProviderModel {
         id:                  json['id'] as String,
         name:                json['name'] as String,
         photoUrl:            json['photo_url'] as String?,
-        rating:              (json['rating'] as num?)?.toDouble() ?? 0,
-        ratingCount:         (json['rating_count'] as num?)?.toInt() ?? 0,
-        totalInterventions:  (json['total_interventions'] as num?)?.toInt() ?? 0,
+        rating:              _num(json['rating']),
+        ratingCount:         _num(json['rating_count']).toInt(),
+        totalInterventions:  _num(json['total_interventions']).toInt(),
         phone:               json['phone'] as String?,
       );
+}
+
+// Conversion tolérante : Laravel sérialise parfois les colonnes
+// DECIMAL sous forme de chaînes ("4.50") plutôt que de nombres JSON.
+double _num(dynamic v) {
+  if (v == null) return 0;
+  if (v is num) return v.toDouble();
+  return double.tryParse(v.toString()) ?? 0;
 }
 
 /// Secteur avec son libellé d'affichage et son émoji, dans l'ordre
