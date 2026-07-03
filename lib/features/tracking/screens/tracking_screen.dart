@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/utils/price_calculator.dart';
+import '../../auth/controllers/auth_controller.dart';
 import '../widgets/safety_share_sheet.dart';
 
 class TrackingScreen extends StatefulWidget {
@@ -39,10 +41,28 @@ class _TrackingScreenState extends State<TrackingScreen> {
     // l'API REST, puis le WebSocket prend le relais pour le temps réel.
     _loadInitial();
 
+    // BUG CORRIGÉ : passait widget.interventionId (l'ID de l'intervention)
+    // alors que subscribeToIntervention() attend l'ID de l'UTILISATEUR pour
+    // construire le canal 'private-user.{userId}'. Le canal résultant ne
+    // correspondait jamais à l'utilisateur réel -> l'authentification du
+    // canal privé échouait systématiquement (routes/channels.php compare
+    // $user->id à cet identifiant) -> aucune mise à jour temps réel n'a
+    // jamais pu arriver sur cet écran.
+    final userId = context.read<AuthController>().user?.id ?? '';
     _sub = RealtimeService.instance
-        .subscribeToIntervention(widget.interventionId).listen((data) {
-      final i = InterventionModel.fromJson(data);
-      setState(() => _intervention = i);
+        .subscribeToIntervention(userId).listen((data) {
+      // BUG CORRIGÉ : le payload WebSocket ne contient qu'un SOUS-ENSEMBLE
+      // des champs (id, status, position...), pas l'intervention complète.
+      // InterventionModel.fromJson() exige des champs obligatoires absents
+      // de ce payload partiel (ex: user_id) -> plantait à chaque mise à
+      // jour temps réel. On fusionne maintenant avec l'état déjà chargé via
+      // copyWithWs, comme déjà fait côté app Pro.
+      final incomingId = data['id'] as String?;
+      if (incomingId != widget.interventionId) return;
+      setState(() {
+        _intervention = _intervention?.copyWithWs(data);
+      });
+      final i = _intervention;
       if (i != null &&
           i.providerLatitude != null &&
           i.providerLongitude != null) {

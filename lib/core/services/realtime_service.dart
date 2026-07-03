@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -9,15 +10,22 @@ class RealtimeService {
   RealtimeService._();
   static final RealtimeService instance = RealtimeService._();
 
-  static const String _host  = 'api.vigiroutes.com';
-  static const String _appKey= '642e796713cd4093e508862ee725e601';
-  static const int    _port  = 443;
+  static const String _host      = 'api.vigiroutes.com';
+  static const String _appKey    = '642e796713cd4093e508862ee725e601';
+  static const int    _port      = 443;
+  // BUG CORRIGÉ : cette app est un CLIENT — l'auth des canaux privés doit
+  // passer par le groupe de routes 'user' (middleware firebase.user), pas
+  // 'provider'. Sinon $request->user() ne résout pas le bon modèle et
+  // routes/channels.php refuse l'abonnement.
+  static const String _authUrl   = 'https://$_host/api/user/broadcasting/auth';
 
   WebSocketChannel? _channel;
   String?           _token;
+  String?           _socketId;
   bool              _connected = false;
   Timer?            _pingTimer;
   Timer?            _reconnectTimer;
+  final Dio         _authDio = Dio();
 
   final Map<String, StreamController<Map<String,dynamic>>> _controllers = {};
   final Map<String, Set<String>> _subscriptions = {}; // channel → events
@@ -44,8 +52,7 @@ class RealtimeService {
       // connexion (DNS, hôte injoignable, etc.) de façon fiable via
       // stream.listen(onError: ...) — problème connu du package. Sans ce
       // `await ... .ready`, une simple coupure réseau/DNS remontait comme
-      // exception non rattrapée jusqu'au gestionnaire d'erreur global de
-      // l'app (même bug identifié et corrigé côté vigiroutesPro).
+      // exception non rattrapée jusqu'au gestionnaire d'erreur global.
       await _channel!.ready;
 
       _connected = true;
@@ -79,9 +86,21 @@ class RealtimeService {
         return;
       }
 
-      // Connexion établie
+      // Connexion établie — récupérer le socket_id, indispensable pour
+      // authentifier ensuite les canaux privés (BUG CORRIGÉ : jamais
+      // capturé avant, donc l'auth des canaux privés était impossible
+      // même une fois la signature du serveur obtenue).
       if (event == 'pusher:connection_established') {
-        debugPrint('[WS] Handshake Reverb OK');
+        try {
+          final data = msg['data'];
+          final parsed = data is String
+              ? jsonDecode(data) as Map<String, dynamic>
+              : Map<String, dynamic>.from(data as Map);
+          _socketId = parsed['socket_id'] as String?;
+        } catch (e) {
+          debugPrint('[WS] Impossible de lire le socket_id: $e');
+        }
+        debugPrint('[WS] Handshake Reverb OK (socket_id=$_socketId)');
         // Re-souscrire aux canaux actifs après reconnexion
         for (final channel in _subscriptions.keys) {
           _subscribeChannel(channel);
@@ -143,22 +162,57 @@ class RealtimeService {
 
   // ── Souscription aux canaux privés ─────────────────────────────────────────
 
-  void _subscribeChannel(String channel) {
-    // Auth pour les canaux privés
-    _send({
-      'event': 'pusher:subscribe',
-      'data': {
-        'channel': channel,
-        'auth':    '', // Reverb génère l'auth côté serveur
-      },
-    });
+  /// BUG CORRIGÉ : envoyait 'auth': '' (chaîne vide) en supposant que
+  /// Reverb générait l'authentification côté serveur automatiquement —
+  /// faux. Pour un canal privé, c'est le CLIENT qui doit demander une
+  /// signature au serveur (POST /broadcasting/auth avec channel_name +
+  /// socket_id + le token Firebase), signature que Reverb vérifie avant
+  /// d'accepter l'abonnement. Sans ça, Reverb rejette silencieusement
+  /// tout abonnement à un canal privé — aucune mise à jour temps réel
+  /// (statut, position du prestataire) n'a jamais pu arriver.
+  Future<void> _subscribeChannel(String channel) async {
+    if (!channel.startsWith('private-')) {
+      _send({'event': 'pusher:subscribe', 'data': {'channel': channel}});
+      return;
+    }
+
+    if (_socketId == null || _token == null) {
+      debugPrint('[WS] Abonnement à $channel différé (socket_id/token pas encore prêts)');
+      return;
+    }
+
+    try {
+      final response = await _authDio.post(
+        _authUrl,
+        data: {
+          'socket_id':    _socketId,
+          'channel_name': channel,
+        },
+        options: Options(
+          headers: {'Authorization': 'Bearer $_token'},
+          contentType: 'application/json',
+        ),
+      );
+      final auth = response.data['auth'] as String?;
+      if (auth == null) {
+        debugPrint('[WS] Auth vide reçue pour $channel');
+        return;
+      }
+      _send({
+        'event': 'pusher:subscribe',
+        'data': {
+          'channel': channel,
+          'auth':    auth,
+        },
+      });
+      debugPrint('[WS] Abonné à $channel');
+    } catch (e) {
+      debugPrint('[WS] Échec auth canal $channel : $e');
+    }
   }
 
   Stream<Map<String,dynamic>> subscribeToIntervention(String userId) =>
       _subscribe('private-user.$userId', 'intervention.updated');
-
-  Stream<Map<String,dynamic>> subscribeToDispatch(String providerId) =>
-      _subscribe('private-provider.$providerId', 'intervention.updated');
 
   Stream<Map<String,dynamic>> subscribeToAdminInterventions() =>
       _subscribe('private-admin.interventions', 'intervention.updated');
