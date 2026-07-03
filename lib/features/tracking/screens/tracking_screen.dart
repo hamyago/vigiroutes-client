@@ -26,6 +26,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
   GoogleMapController? _mapCtrl;
   InterventionModel? _intervention;
   StreamSubscription? _sub;
+  Timer? _pollTimer;
   bool _loadError = false;
 
   @override
@@ -40,6 +41,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
     // restait bloqué indéfiniment. On charge maintenant l'état initial via
     // l'API REST, puis le WebSocket prend le relais pour le temps réel.
     _loadInitial();
+    _startPolling();
 
     // BUG CORRIGÉ : passait widget.interventionId (l'ID de l'intervention)
     // alors que subscribeToIntervention() attend l'ID de l'UTILISATEUR pour
@@ -89,9 +91,46 @@ class _TrackingScreenState extends State<TrackingScreen> {
     }
   }
 
+  // ── Rafraîchissement automatique par sondage (secours) ──────────────────
+  // AJOUTÉ : la fiabilité du WebSocket pour voir le prestataire approcher
+  // en temps réel n'a pas pu être confirmée en conditions réelles malgré
+  // plusieurs corrections successives côté auth de canal. Ce sondage
+  // toutes les 4s repose uniquement sur l'API REST (dont le bon
+  // fonctionnement est déjà avéré) — garantie de secours simple et fiable,
+  // tourne en plus du WebSocket sans le remplacer.
+  void _startPolling() {
+    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      final status = _intervention?.status;
+      if (status == 'completed' || status == 'cancelled') {
+        _pollTimer?.cancel();
+        return;
+      }
+      try {
+        final data = await _db
+            .getIntervention(widget.interventionId)
+            .timeout(const Duration(seconds: 15));
+        if (!mounted) return;
+        final updated = InterventionModel.fromJson(data);
+        setState(() => _intervention = updated);
+        if (updated.providerLatitude != null &&
+            updated.providerLongitude != null) {
+          _mapCtrl?.animateCamera(
+            CameraUpdate.newLatLng(
+              LatLng(updated.providerLatitude!, updated.providerLongitude!),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('[TrackingScreen] Erreur sondage : $e');
+        // Silencieux : le prochain sondage (4s plus tard) réessaiera.
+      }
+    });
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
+    _pollTimer?.cancel();
     _mapCtrl?.dispose();
     super.dispose();
   }
