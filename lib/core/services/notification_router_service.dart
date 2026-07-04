@@ -29,6 +29,34 @@ class NotificationRouterService {
     FirebaseMessaging.instance.getInitialMessage().then((message) {
       if (message != null) _handleNotification(message);
     });
+
+    // AJOUTÉ : rien n'écoutait les notifications reçues pendant que l'app
+    // est déjà ouverte au premier plan (Android n'affiche PAS la
+    // notification système dans ce cas — c'est à l'app de le faire).
+    // Le backend envoie pourtant bien "✅ Demande acceptée !" dès que le
+    // prestataire accepte (voir InterventionController::accept() côté
+    // API), mais rien ne le montrait si le client avait l'app ouverte à
+    // ce moment précis — même bug déjà identifié et corrigé côté app Pro.
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+  }
+
+  void _handleForegroundMessage(RemoteMessage message) {
+    final type = message.data['type'];
+    if (type != 'intervention_update') return;
+
+    final notification = message.notification;
+    if (notification == null) return;
+
+    final context = navigatorKey.currentContext;
+    if (context == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${notification.title ?? ''} ${notification.body ?? ''}'.trim()),
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _handleNotification(RemoteMessage message) {
