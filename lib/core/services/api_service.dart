@@ -174,6 +174,20 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
+  // AJOUTÉ : aucune méthode n'existait pour soumettre une note — seule
+  // getUserReviews() (lecture des avis reçus) était présente.
+  Future<Map<String, dynamic>> submitReview({
+    required String interventionId,
+    required int    rating,
+    String?         comment,
+  }) async {
+    final res = await post('/user/interventions/$interventionId/review', data: {
+      'rating':  rating,
+      if (comment != null && comment.isNotEmpty) 'comment': comment,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
   Future<void> cancelIntervention(String id, {String? reason}) async {
     try { await post('/user/interventions/$id/cancel', data: {'reason': reason}); }
     catch (_) {}
