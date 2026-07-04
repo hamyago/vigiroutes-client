@@ -273,11 +273,17 @@ class ReviewModel {
     required this.createdAt,
   });
 
+  // BUG CORRIGÉ : le backend renvoie from_user_id/to_user_id (jamais
+  // user_id/provider_id) — ce cast échouait à CHAQUE avis, avalé
+  // silencieusement par le try/catch de user_reviews_screen.dart, qui
+  // affichait donc toujours "Aucun avis reçu" même quand il y en avait.
   factory ReviewModel.fromJson(Map<String, dynamic> json) => ReviewModel(
         id:             json['id'] as String,
         interventionId: json['intervention_id'] as String,
-        userId:         json['user_id'] as String,
-        providerId:     json['provider_id'] as String,
+        userId:         json['from_user_id'] as String? ??
+            json['user_id'] as String? ?? '',
+        providerId:     json['to_user_id'] as String? ??
+            json['provider_id'] as String? ?? '',
         rating:         _toDouble(json['rating']),
         comment:        json['comment'] as String?,
         createdAt:      DateTime.parse(json['created_at'] as String),

@@ -275,6 +275,17 @@ class ApiService {
     } catch (_) { return []; }
   }
 
+  // AJOUTÉ : aucune méthode n'existait pour voir les avis que LE CLIENT a
+  // lui-même donnés aux prestataires (seuls les avis reçus étaient visibles).
+  Future<List<dynamic>> getReviewsGiven() async {
+    try {
+      final res = await get('/user/reviews/given');
+      final d = res.data;
+      if (d is Map && d['data'] is List) return d['data'] as List;
+      return (d as List?) ?? [];
+    } catch (_) { return []; }
+  }
+
   // ── Vehicles ──────────────────────────────────────────────────────────────
 
   /// Liste les véhicules de l'utilisateur. Tolère `{ "data": [...] }`,
