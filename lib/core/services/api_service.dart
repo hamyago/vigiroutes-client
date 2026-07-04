@@ -188,6 +188,23 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
+  // AJOUTÉ : historique des notifications (cloche sur l'accueil, jusqu'ici
+  // jamais branchée à rien).
+  Future<List<dynamic>> getNotifications({int page = 1}) async {
+    try {
+      final res = await get('/user/notifications', params: {'page': page});
+      return (res.data['data'] as List?) ?? [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> markNotificationsRead() async {
+    try {
+      await post('/user/notifications/read-all');
+    } catch (_) {}
+  }
+
   Future<void> cancelIntervention(String id, {String? reason}) async {
     try { await post('/user/interventions/$id/cancel', data: {'reason': reason}); }
     catch (_) {}

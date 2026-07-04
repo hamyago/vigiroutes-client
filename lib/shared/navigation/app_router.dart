@@ -16,6 +16,7 @@ import '../../features/profile/screens/edit_profile_screen.dart';
 import '../../features/profile/screens/vehicles_screen.dart';
 import '../../features/profile/screens/user_reviews_screen.dart';
 import '../../features/reviews/screens/review_screen.dart';
+import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/request/screens/request_screen.dart';
 import '../../features/request/controllers/request_controller.dart';
 import '../../features/tracking/screens/tracking_screen.dart' as track;
@@ -204,6 +205,9 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
             path: '/user/review/:id',
             builder: (ctx, s) => ReviewScreen(
                 interventionId: s.pathParameters['id']!)),
+        GoRoute(
+            path: '/user/notifications',
+            builder: (_, __) => const NotificationsScreen()),
         GoRoute(
             path: '/user/emergency',
             builder: (_, __) => const _EmergencyRoute()),

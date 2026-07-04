@@ -139,7 +139,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     child: IconButton(
                       icon: const Icon(Icons.notifications_outlined,
                           size: 20, color: AppColors.textPrimary),
-                      onPressed: () {},
+                      // BUG CORRIGÉ : onPressed: () {} — ne faisait
+                      // littéralement rien au clic.
+                      onPressed: () => context.push('/user/notifications'),
                     ),
                   ),
                   const SizedBox(width: 8),
