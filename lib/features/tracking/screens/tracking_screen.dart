@@ -28,6 +28,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
   StreamSubscription? _sub;
   Timer? _pollTimer;
   bool _loadError = false;
+  // NOUVEAU : évite de réafficher la popup du montant final à chaque
+  // sondage/mise à jour une fois qu'elle a déjà été montrée une fois.
+  bool _amountPopupShown = false;
 
   @override
   void initState() {
@@ -64,6 +67,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
       setState(() {
         _intervention = _intervention?.copyWithWs(data);
       });
+      _maybeShowAmountPopup();
       final i = _intervention;
       if (i != null &&
           i.providerLatitude != null &&
@@ -77,6 +81,52 @@ class _TrackingScreenState extends State<TrackingScreen> {
     });
   }
 
+  // NOUVEAU : dès que l'intervention passe à 'completed', affiche une
+  // popup non bloquante avec le montant final saisi par le prestataire
+  // (aucune confirmation requise de la part du client — juste informatif).
+  void _maybeShowAmountPopup() {
+    final i = _intervention;
+    if (i == null || _amountPopupShown) return;
+    if (i.status != 'completed') return;
+
+    _amountPopupShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('🎉 Intervention terminée !'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Montant à payer au prestataire :'),
+              const SizedBox(height: 8),
+              Text(
+                PriceCalculator.formatFcfa(i.totalPrice),
+                style: const TextStyle(
+                    fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.primary),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Fermer'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                context.push('/user/review/${i.id}');
+              },
+              child: const Text('Noter le prestataire'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
   Future<void> _loadInitial() async {
     try {
       final data = await _db
@@ -84,6 +134,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
           .timeout(const Duration(seconds: 30));
       if (mounted) {
         setState(() => _intervention = InterventionModel.fromJson(data));
+        _maybeShowAmountPopup();
       }
     } catch (e) {
       debugPrint('[TrackingScreen] Erreur chargement initial : $e');
@@ -112,6 +163,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         if (!mounted) return;
         final updated = InterventionModel.fromJson(data);
         setState(() => _intervention = updated);
+        _maybeShowAmountPopup();
         if (updated.providerLatitude != null &&
             updated.providerLongitude != null) {
           _mapCtrl?.animateCamera(
