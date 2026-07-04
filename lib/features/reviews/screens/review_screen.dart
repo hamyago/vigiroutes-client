@@ -98,7 +98,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 style: TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 24),
-              CustomButton(
+              AppButton(
                 label: 'Retour à l\'accueil',
                 onPressed: () => context.go('/user/home'),
               ),
@@ -165,7 +165,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
               Text(_error!, style: const TextStyle(color: AppColors.error)),
             ],
             const SizedBox(height: 16),
-            CustomButton(
+            AppButton(
               label: 'Envoyer mon avis',
               isLoading: _submitting,
               onPressed: _submit,
