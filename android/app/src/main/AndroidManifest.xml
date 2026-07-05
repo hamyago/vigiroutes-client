@@ -21,6 +21,15 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}"/>
 
+        <!-- AJOUTÉ : correctif connu pour un bug Flutter/Android où une
+             carte Google Maps (google_maps_flutter) sur un écran bloque
+             l'affichage du clavier sur les écrans suivants (le TextField
+             semble alors mort — aucun clavier, aucune saisie possible).
+             Force la composition hybride correcte des vues natives. -->
+        <meta-data
+            android:name="io.flutter.embedded_views_preview"
+            android:value="true"/>
+
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="vigiroutes_channel"/>
