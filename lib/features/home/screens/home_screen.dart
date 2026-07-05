@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../controllers/home_controller.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/api_service.dart';
+import '../../../shared/navigation/app_router.dart' show homeRouteObserver;
 
 /// DIAGNOSTIC : true = remplace GoogleMap par un cadre neutre.
 /// Remis à false : la cause du crash était l'absence de HomeController.
@@ -18,12 +19,20 @@ class UserHomeScreen extends StatefulWidget {
   State<UserHomeScreen> createState() => _UserHomeScreenState();
 }
 
-class _UserHomeScreenState extends State<UserHomeScreen> {
+class _UserHomeScreenState extends State<UserHomeScreen> with RouteAware {
   GoogleMapController? _mapController;
   final _draggableController = DraggableScrollableController();
   // AJOUTÉ : pastille sur la cloche — aucun indicateur visuel n'existait
   // avant pour signaler des notifications non lues.
   int _unreadCount = 0;
+
+  // BUG CORRIGÉ : la carte Google Maps restait active en arrière-plan
+  // (jamais disposée) quand un écran était poussé par-dessus l'accueil
+  // (ex: Pièces auto) — une PlatformView de carte active en dessous peut
+  // bloquer l'affichage du clavier sur l'écran du dessus (bug documenté
+  // Flutter/Android). On masque maintenant la carte dès qu'un autre
+  // écran passe au premier plan, et on la restaure au retour.
+  bool _routeIsCurrent = true;
 
   @override
   void initState() {
@@ -32,6 +41,33 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       context.read<HomeController>().initialize();
     });
     _loadUnreadCount();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      homeRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    homeRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPushNext() {
+    // Un écran vient d'être poussé par-dessus l'accueil (ex: Pièces auto).
+    if (mounted) setState(() => _routeIsCurrent = false);
+  }
+
+  @override
+  void didPopNext() {
+    // Retour sur l'accueil après avoir fermé l'écran poussé par-dessus.
+    if (mounted) setState(() => _routeIsCurrent = true);
   }
 
   Future<void> _loadUnreadCount() async {
@@ -56,14 +92,16 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
         children: [
           // ── Map ──────────────────────────────────────────────────────────
           if (ctrl.userPosition != null)
-            _kDiagnoseDisableMap
+            (_kDiagnoseDisableMap || !_routeIsCurrent)
                 ? Container(
                     color: const Color(0xFFDDE6F0),
                     alignment: Alignment.center,
-                    child: const Text(
-                      'CARTE DESACTIVEE (diagnostic)',
-                      style: TextStyle(color: Colors.black54, fontSize: 16),
-                    ),
+                    child: _routeIsCurrent
+                        ? const Text(
+                            'CARTE DESACTIVEE (diagnostic)',
+                            style: TextStyle(color: Colors.black54, fontSize: 16),
+                          )
+                        : null,
                   )
                 : GoogleMap(
                     initialCameraPosition: CameraPosition(

@@ -118,10 +118,18 @@ class _NavItem extends StatelessWidget {
       );
 }
 
+// AJOUTÉ : permet à UserHomeScreen de savoir quand un écran est poussé
+// par-dessus lui (ex: Pièces auto), pour masquer sa carte Google Maps à
+// ce moment précis — une carte native active en arrière-plan peut
+// bloquer l'affichage du clavier sur l'écran poussé par-dessus (bug
+// documenté Flutter/Android avec les PlatformViews).
+final RouteObserver<PageRoute> homeRouteObserver = RouteObserver<PageRoute>();
+
 GoRouter buildRouter(AuthController auth) => GoRouter(
       navigatorKey: NotificationRouterService.instance.navigatorKey,
       initialLocation: '/',
       refreshListenable: auth,
+      observers: [homeRouteObserver],
       redirect: (ctx, state) {
         final loc       = state.matchedLocation;
         final authState = auth.state;
