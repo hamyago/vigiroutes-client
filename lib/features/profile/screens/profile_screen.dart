@@ -10,8 +10,28 @@ import '../../../core/constants/app_constants.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../../core/services/api_service.dart';
 
-class UserProfileScreen extends StatelessWidget {
+/// BUG CORRIGÉ : AuthController.user est chargé une seule fois au login
+/// et jamais rafraîchi automatiquement — la note (moyenne calculée côté
+/// serveur à partir des avis reçus des prestataires) restait donc figée
+/// à "Pas encore noté" même après plusieurs avis reçus. refreshUser()
+/// existait déjà (utilisé après changement de photo) mais n'était jamais
+/// appelé à l'ouverture de cet écran. Même correctif déjà appliqué côté
+/// app Pro (provider_info_screen.dart).
+class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
+
+  @override
+  State<UserProfileScreen> createState() => _UserProfileScreenState();
+}
+
+class _UserProfileScreenState extends State<UserProfileScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AuthController>().refreshUser();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
