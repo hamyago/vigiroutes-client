@@ -97,13 +97,21 @@ class _PartsSearchScreenState extends State<PartsSearchScreen> {
                     controller: _searchCtrl,
                     textInputAction: TextInputAction.search,
                     onSubmitted: (_) => _search(),
+                    autofocus: false,
+                    enabled: true,
+                    // BUG POSSIBLE CORRIGÉ : aucune couleur de texte n'était
+                    // précisée — si le thème généré (Material 3 depuis
+                    // colorSchemeSeed) produisait un texte clair par
+                    // défaut, on pouvait taper sans jamais rien voir
+                    // apparaître, donnant l'impression que le champ est
+                    // décoratif/mort.
+                    style: const TextStyle(color: Colors.black87, fontSize: 15),
+                    cursorColor: AppColors.primary,
                     decoration: InputDecoration(
                       hintText: 'Ex: plaquette de frein, batterie, pneu...',
+                      hintStyle: const TextStyle(color: AppColors.textMuted),
                       filled: true,
                       fillColor: Colors.white,
-                      // BUG CORRIGÉ : c'était une Icon() décorative, pas
-                      // cliquable — remplacée par un vrai IconButton qui
-                      // déclenche aussi la recherche.
                       prefixIcon: IconButton(
                         icon: const Icon(Icons.search),
                         onPressed: _searching ? null : _search,
