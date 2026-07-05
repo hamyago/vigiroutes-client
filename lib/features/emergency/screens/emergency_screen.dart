@@ -293,18 +293,32 @@ class _PhoneRow extends StatelessWidget {
 
 // ── Compte à rebours ───────────────────────────────────────────────────────────
 
-class _CountdownView extends StatelessWidget {
+class _CountdownView extends StatefulWidget {
   final EmergencyController ctrl;
   const _CountdownView({required this.ctrl});
 
+  @override
+  State<_CountdownView> createState() => _CountdownViewState();
+}
+
+class _CountdownViewState extends State<_CountdownView> {
   static const _colors = {
     EmergencyType.accident: Color(0xFFE53E3E),
     EmergencyType.fire:     Color(0xFFFF6B35),
     EmergencyType.medical:  Color(0xFF3182CE),
   };
 
+  final _descCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final ctrl  = widget.ctrl;
     final type  = ctrl.selectedType!;
     final color = _colors[type]!;
     final count = ctrl.countdown;
@@ -313,13 +327,13 @@ class _CountdownView extends StatelessWidget {
       key: const ValueKey('countdown'),
       color: color.withValues(alpha: 0.12),
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(type.icon, style: const TextStyle(fontSize: 64)),
-              const SizedBox(height: 20),
+              Text(type.icon, style: const TextStyle(fontSize: 56)),
+              const SizedBox(height: 16),
               Text(
                 'Appel ${type.serviceName}',
                 style: TextStyle(
@@ -332,13 +346,13 @@ class _CountdownView extends StatelessWidget {
                 style: const TextStyle(color: Colors.white60, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 24),
               Stack(
                 alignment: Alignment.center,
                 children: [
                   SizedBox(
-                    width: 130,
-                    height: 130,
+                    width: 110,
+                    height: 110,
                     child: CircularProgressIndicator(
                       value: count / 5,
                       strokeWidth: 8,
@@ -349,11 +363,42 @@ class _CountdownView extends StatelessWidget {
                   Text('$count',
                       style: TextStyle(
                           color: color,
-                          fontSize: 56,
+                          fontSize: 48,
                           fontWeight: FontWeight.w900)),
                 ],
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 24),
+              // AJOUTÉ : détail facultatif — n'empêche jamais l'envoi. Le
+              // compte à rebours continue même pendant la saisie ; si rien
+              // n'est tapé, l'alerte part quand même normalement.
+              TextField(
+                controller: _descCtrl,
+                onChanged: ctrl.setDescription,
+                maxLines: 2,
+                minLines: 1,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Un détail à ajouter ? (facultatif)',
+                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.08),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: color),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(

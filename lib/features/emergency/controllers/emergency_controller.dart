@@ -15,12 +15,20 @@ class EmergencyController extends ChangeNotifier {
   Timer? _timer;
   String? _alertId;
   String? _errorMessage;
+  // AJOUTÉ : détail facultatif que la personne peut taper PENDANT le
+  // compte à rebours (qui continue en arrière-plan, sans jamais bloquer
+  // ni ralentir l'envoi si elle n'a pas le temps/l'envie d'écrire).
+  String? _description;
 
   EmergencyState get state => _state;
   EmergencyType? get selectedType => _selectedType;
   int get countdown => _countdown;
   String? get alertId => _alertId;
   String? get errorMessage => _errorMessage;
+
+  void setDescription(String value) {
+    _description = value.trim().isEmpty ? null : value.trim();
+  }
 
   bool get isCountingDown => _state == EmergencyState.countdown;
   bool get isDone => _state == EmergencyState.done;
@@ -48,6 +56,7 @@ class EmergencyController extends ChangeNotifier {
     _state = EmergencyState.idle;
     _selectedType = null;
     _countdown = 5;
+    _description = null;
     notifyListeners();
   }
 
@@ -65,6 +74,7 @@ class EmergencyController extends ChangeNotifier {
       _alertId = (await _service.triggerEmergency(
         type: _selectedType!,
         user: _currentUser!,
+        description: _description,
       )).id;
 
       // Sur web desktop, l'appel tel: ne fonctionne pas —
@@ -99,6 +109,7 @@ class EmergencyController extends ChangeNotifier {
     _countdown = 5;
     _alertId = null;
     _errorMessage = null;
+    _description = null;
     notifyListeners();
   }
 
