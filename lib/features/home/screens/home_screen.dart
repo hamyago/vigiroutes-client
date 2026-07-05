@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import '../controllers/home_controller.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/api_service.dart';
 
 /// DIAGNOSTIC : true = remplace GoogleMap par un cadre neutre.
 /// Remis à false : la cause du crash était l'absence de HomeController.
@@ -20,6 +21,9 @@ class UserHomeScreen extends StatefulWidget {
 class _UserHomeScreenState extends State<UserHomeScreen> {
   GoogleMapController? _mapController;
   final _draggableController = DraggableScrollableController();
+  // AJOUTÉ : pastille sur la cloche — aucun indicateur visuel n'existait
+  // avant pour signaler des notifications non lues.
+  int _unreadCount = 0;
 
   @override
   void initState() {
@@ -27,6 +31,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<HomeController>().initialize();
     });
+    _loadUnreadCount();
+  }
+
+  Future<void> _loadUnreadCount() async {
+    final count = await ApiService.instance.getUnreadNotificationsCount();
+    if (mounted) setState(() => _unreadCount = count);
   }
 
   void _animateTo(LatLng pos) {
@@ -158,12 +168,36 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                         ),
                       ],
                     ),
-                    child: IconButton(
-                      icon: const Icon(Icons.notifications_outlined,
-                          size: 20, color: AppColors.textPrimary),
-                      // BUG CORRIGÉ : onPressed: () {} — ne faisait
-                      // littéralement rien au clic.
-                      onPressed: () => context.push('/user/notifications'),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.notifications_outlined,
+                              size: 20, color: AppColors.textPrimary),
+                          // BUG CORRIGÉ : onPressed: () {} — ne faisait
+                          // littéralement rien au clic.
+                          onPressed: () async {
+                            await context.push('/user/notifications');
+                            // Rafraîchit la pastille au retour (l'écran de
+                            // notifications marque tout comme lu à l'ouverture).
+                            _loadUnreadCount();
+                          },
+                        ),
+                        if (_unreadCount > 0)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: Container(
+                              width: 9,
+                              height: 9,
+                              decoration: BoxDecoration(
+                                color: AppColors.error,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 1.5),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),

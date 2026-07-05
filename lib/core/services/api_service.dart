@@ -205,6 +205,16 @@ class ApiService {
     } catch (_) {}
   }
 
+  // AJOUTÉ : pour la pastille sur la cloche de l'accueil.
+  Future<int> getUnreadNotificationsCount() async {
+    try {
+      final res = await get('/user/notifications/unread-count');
+      return (res.data['count'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Future<void> cancelIntervention(String id, {String? reason}) async {
     try { await post('/user/interventions/$id/cancel', data: {'reason': reason}); }
     catch (_) {}
