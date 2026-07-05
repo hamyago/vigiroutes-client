@@ -101,10 +101,20 @@ class _PartsSearchScreenState extends State<PartsSearchScreen> {
                       hintText: 'Ex: plaquette de frein, batterie, pneu...',
                       filled: true,
                       fillColor: Colors.white,
-                      prefixIcon: const Icon(Icons.search),
+                      // BUG CORRIGÉ : c'était une Icon() décorative, pas
+                      // cliquable — remplacée par un vrai IconButton qui
+                      // déclenche aussi la recherche.
+                      prefixIcon: IconButton(
+                        icon: const Icon(Icons.search),
+                        onPressed: _searching ? null : _search,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
+                        borderSide: BorderSide(color: AppColors.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppColors.border),
                       ),
                     ),
                   ),

@@ -200,26 +200,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 12,
-                        ),
-                      ],
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.person_outline,
-                          size: 20, color: AppColors.textPrimary),
-                      onPressed: () => context.push('/user/profile'),
-                    ),
-                  ),
+                  // RETIRÉ : icône profil en haut — redondante avec l'onglet
+                  // "Profil" déjà présent dans la barre de navigation du bas,
+                  // comme demandé.
                 ],
               ),
             ),
@@ -236,13 +219,23 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: ctrl.serviceTypes.length + 1,
+                  // +2 : le chip "Tous" en premier, "Pièces auto" en dernier
+                  // (AJOUTÉ — navigue vers la recherche de pièces au lieu de
+                  // filtrer les prestataires, contrairement aux autres chips).
+                  itemCount: ctrl.serviceTypes.length + 2,
                   itemBuilder: (_, i) {
                     if (i == 0) {
                       return _FilterChip(
                         label: 'Tous',
                         selected: ctrl.selectedServiceFilter == null,
                         onTap: () => ctrl.setServiceFilter(null),
+                      );
+                    }
+                    if (i == ctrl.serviceTypes.length + 1) {
+                      return _FilterChip(
+                        label: '🔩 Pièces auto',
+                        selected: false,
+                        onTap: () => context.push('/user/parts'),
                       );
                     }
                     final s = ctrl.serviceTypes[i - 1];
