@@ -328,3 +328,121 @@ class VehicleModel {
 
   Map<String, dynamic> toJson() => toMap();
 }
+
+// ── Pièces automobiles (magasins) ─────────────────────────────────────────────
+// AJOUTÉ : nouvelle fonctionnalité, commande de pièces auprès des magasins
+// à proximité (rayon 3 km).
+
+class StoreProductModel {
+  final String id;
+  final String name;
+  final double unitPrice;
+  final bool isAvailable;
+
+  const StoreProductModel({
+    required this.id,
+    required this.name,
+    required this.unitPrice,
+    required this.isAvailable,
+  });
+
+  factory StoreProductModel.fromJson(Map<String, dynamic> json) => StoreProductModel(
+        id:          json['id'] as String,
+        name:        json['name'] as String,
+        unitPrice:   json['unit_price'] is num
+            ? (json['unit_price'] as num).toDouble()
+            : double.tryParse(json['unit_price'].toString()) ?? 0,
+        isAvailable: json['is_available'] as bool? ?? true,
+      );
+}
+
+class StoreModel {
+  final String id;
+  final String name;
+  final String? phone;
+  final String? address;
+  final double? latitude;
+  final double? longitude;
+  final double? distanceKm;
+  final double rating;
+  final int ratingCount;
+  final List<StoreProductModel> products;
+
+  const StoreModel({
+    required this.id,
+    required this.name,
+    this.phone,
+    this.address,
+    this.latitude,
+    this.longitude,
+    this.distanceKm,
+    this.rating = 0,
+    this.ratingCount = 0,
+    this.products = const [],
+  });
+
+  factory StoreModel.fromJson(Map<String, dynamic> json) => StoreModel(
+        id:         json['id'] as String,
+        name:       json['name'] as String,
+        phone:      json['phone'] as String?,
+        address:    json['address'] as String?,
+        latitude:   (json['latitude']  as num?)?.toDouble(),
+        longitude:  (json['longitude'] as num?)?.toDouble(),
+        distanceKm: (json['distance_km'] as num?)?.toDouble(),
+        rating:     (json['rating'] as num?)?.toDouble() ?? 0,
+        ratingCount:(json['rating_count'] as num?)?.toInt() ?? 0,
+        products:   (json['products'] as List<dynamic>? ?? [])
+            .map((p) => StoreProductModel.fromJson(p as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+class PartOrderItemModel {
+  final String productName;
+  final double unitPrice;
+  final int quantity;
+  final double subtotal;
+
+  const PartOrderItemModel({
+    required this.productName,
+    required this.unitPrice,
+    required this.quantity,
+    required this.subtotal,
+  });
+
+  factory PartOrderItemModel.fromJson(Map<String, dynamic> json) => PartOrderItemModel(
+        productName: json['product_name'] as String,
+        unitPrice:   (json['unit_price'] as num?)?.toDouble() ?? 0,
+        quantity:    (json['quantity'] as num?)?.toInt() ?? 0,
+        subtotal:    (json['subtotal'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+class PartOrderModel {
+  final String id;
+  final String status;
+  final double totalAmount;
+  final DateTime createdAt;
+  final List<PartOrderItemModel> items;
+  final Map<String, dynamic>? store;
+
+  const PartOrderModel({
+    required this.id,
+    required this.status,
+    required this.totalAmount,
+    required this.createdAt,
+    this.items = const [],
+    this.store,
+  });
+
+  factory PartOrderModel.fromJson(Map<String, dynamic> json) => PartOrderModel(
+        id:          json['id'] as String,
+        status:      json['status'] as String? ?? 'pending',
+        totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
+        createdAt:   DateTime.parse(json['created_at'] as String),
+        items: (json['items'] as List<dynamic>? ?? [])
+            .map((i) => PartOrderItemModel.fromJson(i as Map<String, dynamic>))
+            .toList(),
+        store: json['store'] as Map<String, dynamic>?,
+      );
+}

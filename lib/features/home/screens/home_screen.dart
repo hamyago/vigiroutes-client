@@ -123,6 +123,28 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 10),
+                  // AJOUTÉ : accès à la recherche de pièces automobiles.
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 12,
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.build_circle_outlined,
+                          size: 20, color: AppColors.textPrimary),
+                      tooltip: 'Pièces auto',
+                      onPressed: () => context.push('/user/parts'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Container(
                     width: 44,
                     height: 44,

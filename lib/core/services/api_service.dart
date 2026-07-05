@@ -311,4 +311,47 @@ class ApiService {
   Future<void> deleteVehicle(String id) async {
     await delete('/user/vehicles/$id');
   }
+  // AJOUTÉ : recherche et commande de pièces automobiles auprès des
+  // magasins à proximité (rayon 3 km par défaut).
+  Future<List<dynamic>> searchParts({
+    required String query,
+    required double latitude,
+    required double longitude,
+    double radiusKm = 3,
+  }) async {
+    final res = await get('/user/parts/search', params: {
+      'q': query,
+      'latitude': latitude,
+      'longitude': longitude,
+      'radius_km': radiusKm,
+    });
+    return res.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getStoreDetail(String storeId) async {
+    final res = await get('/user/parts/stores/$storeId');
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createPartOrder({
+    required String storeId,
+    required List<Map<String, dynamic>> items,
+    String? note,
+  }) async {
+    final res = await post('/user/parts/orders', data: {
+      'store_id': storeId,
+      'items': items,
+      if (note != null && note.isNotEmpty) 'note': note,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<List<dynamic>> getMyPartOrders({int page = 1}) async {
+    try {
+      final res = await get('/user/parts/orders', params: {'page': page});
+      return (res.data['data'] as List?) ?? [];
+    } catch (_) {
+      return [];
+    }
+  }
 }

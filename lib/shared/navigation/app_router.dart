@@ -17,6 +17,9 @@ import '../../features/profile/screens/vehicles_screen.dart';
 import '../../features/profile/screens/user_reviews_screen.dart';
 import '../../features/reviews/screens/review_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
+import '../../features/parts/screens/parts_search_screen.dart';
+import '../../features/parts/screens/store_detail_screen.dart';
+import '../../features/parts/screens/part_orders_screen.dart';
 import '../../features/request/screens/request_screen.dart';
 import '../../features/request/controllers/request_controller.dart';
 import '../../features/tracking/screens/tracking_screen.dart' as track;
@@ -208,6 +211,15 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
         GoRoute(
             path: '/user/notifications',
             builder: (_, __) => const NotificationsScreen()),
+        GoRoute(
+            path: '/user/parts',
+            builder: (_, __) => const PartsSearchScreen()),
+        GoRoute(
+            path: '/user/parts/store/:id',
+            builder: (ctx, s) => StoreDetailScreen(storeId: s.pathParameters['id']!)),
+        GoRoute(
+            path: '/user/parts/orders',
+            builder: (_, __) => const PartOrdersScreen()),
         GoRoute(
             path: '/user/emergency',
             builder: (_, __) => const _EmergencyRoute()),
