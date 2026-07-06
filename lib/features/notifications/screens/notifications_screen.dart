@@ -30,6 +30,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    // Marque comme lues en quittant l'écran — la surbrillance reste donc
+    // visible pendant toute la consultation, même après un tirer-pour-
+    // rafraîchir.
+    ApiService.instance.markNotificationsRead();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -42,8 +51,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         _items = data.cast<Map<String, dynamic>>();
         _loading = false;
       });
-      // Marquer comme lues une fois affichées.
-      ApiService.instance.markNotificationsRead();
+      // MODIFIÉ : marquer comme lues seulement à la FERMETURE de l'écran
+      // (voir dispose()), pas immédiatement au chargement — sinon la
+      // surbrillance "non lue" disparaissait dès qu'on tirait pour
+      // rafraîchir alors qu'on est encore en train de les consulter.
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -128,10 +139,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                // MODIFIÉ : fond teinté (pas juste une fine
+                                // bordure) pour que les non-lues soient
+                                // vraiment visibles au premier coup d'œil.
+                                color: unread ? AppColors.primaryLight : Colors.white,
                                 borderRadius: BorderRadius.circular(14),
                                 border: unread
-                                    ? Border.all(color: AppColors.primary.withValues(alpha: 0.3))
+                                    ? Border.all(color: AppColors.primary.withValues(alpha: 0.5), width: 1.5)
                                     : null,
                                 boxShadow: [
                                   BoxShadow(
@@ -145,16 +159,47 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   if (unread)
                                     Container(
                                       margin: const EdgeInsets.only(top: 6, right: 10),
-                                      width: 8, height: 8,
-                                      decoration: const BoxDecoration(
-                                          color: AppColors.primary, shape: BoxShape.circle),
+                                      width: 10, height: 10,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                              color: AppColors.primary.withValues(alpha: 0.4),
+                                              blurRadius: 4),
+                                        ],
+                                      ),
                                     ),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(n['title'] as String? ?? '',
-                                            style: const TextStyle(fontWeight: FontWeight.w700)),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(n['title'] as String? ?? '',
+                                                  style: TextStyle(
+                                                      fontWeight: FontWeight.w700,
+                                                      color: unread
+                                                          ? AppColors.textPrimary
+                                                          : AppColors.textSecondary)),
+                                            ),
+                                            if (unread)
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.primary,
+                                                  borderRadius: BorderRadius.circular(20),
+                                                ),
+                                                child: const Text('Nouveau',
+                                                    style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.w700)),
+                                              ),
+                                          ],
+                                        ),
                                         const SizedBox(height: 4),
                                         Text(n['body'] as String? ?? '',
                                             style: const TextStyle(

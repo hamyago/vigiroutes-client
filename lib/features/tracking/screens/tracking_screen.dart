@@ -1,5 +1,7 @@
 import '../../../core/services/realtime_service.dart';
 import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -31,10 +33,58 @@ class _TrackingScreenState extends State<TrackingScreen> {
   // NOUVEAU : évite de réafficher la popup du montant final à chaque
   // sondage/mise à jour une fois qu'elle a déjà été montrée une fois.
   bool _amountPopupShown = false;
+  // AJOUTÉ : marqueur voiture personnalisé pour le prestataire, au lieu
+  // du pin orange par défaut de Google Maps.
+  BitmapDescriptor? _carIcon;
+
+  Future<void> _loadCarIcon() async {
+    // Dessine un rond orange avec une icône voiture blanche dedans, puis
+    // convertit en image bitmap utilisable comme icône de marqueur —
+    // technique standard pour des marqueurs personnalisés avec
+    // google_maps_flutter (pas besoin d'un fichier image à part).
+    const double size = 110;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    final bgPaint = Paint()..color = AppColors.primary;
+    canvas.drawCircle(const Offset(size / 2, size / 2), size / 2, bgPaint);
+    canvas.drawCircle(
+      const Offset(size / 2, size / 2),
+      size / 2 - 4,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4,
+    );
+
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(Icons.directions_car.codePoint),
+      style: TextStyle(
+        fontSize: size * 0.55,
+        fontFamily: Icons.directions_car.fontFamily,
+        package: Icons.directions_car.fontPackage,
+        color: Colors.white,
+      ),
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset((size - textPainter.width) / 2, (size - textPainter.height) / 2),
+    );
+
+    final image = await recorder.endRecording().toImage(size.toInt(), size.toInt());
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (bytes == null || !mounted) return;
+    setState(() {
+      _carIcon = BitmapDescriptor.bytes(bytes.buffer.asUint8List());
+    });
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadCarIcon();
 
     // BUG CORRIGÉ : cet écran ne dépendait QUE du WebSocket pour remplir
     // _intervention, qui ne pousse que les CHANGEMENTS futurs (pas
@@ -211,7 +261,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         infoWindow: InfoWindow(
           title: _intervention!.providerName ?? 'Prestataire',
         ),
-        icon:
+        icon: _carIcon ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
       ));
     }
