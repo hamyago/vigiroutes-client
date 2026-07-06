@@ -530,31 +530,55 @@ class _TrackingScreenState extends State<TrackingScreen> {
   }
 
   void _showCancelDialog(BuildContext context, String id) {
+    bool cancelling = false;
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Annuler l\'intervention ?'),
-        content: const Text(
-            'Cette action est irréversible. Des frais d\'annulation peuvent s\'appliquer.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Non'),
-          ),
-          TextButton(
-            onPressed: () async {
-              await _db.updateInterventionStatus(
-                  id, AppConstants.statusCancelled);
-              if (mounted) {
-                Navigator.pop(context);
-                // ignore: use_build_context_synchronously
-                context.go('/user/home');
-              }
-            },
-            child: const Text('Oui, annuler',
-                style: TextStyle(color: AppColors.error)),
-          ),
-        ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Annuler l\'intervention ?'),
+          content: const Text(
+              'Cette action est irréversible. Des frais d\'annulation peuvent s\'appliquer.'),
+          actions: [
+            TextButton(
+              onPressed: cancelling ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Non'),
+            ),
+            TextButton(
+              onPressed: cancelling
+                  ? null
+                  : () async {
+                      setDialogState(() => cancelling = true);
+                      // BUG CORRIGÉ : l'app affichait "annulé" et
+                      // revenait à l'accueil SANS jamais vérifier si le
+                      // serveur avait réellement accepté l'annulation —
+                      // un refus (ex: prestataire déjà en route selon
+                      // les règles serveur) passait inaperçu, laissant le
+                      // prestataire continuer sans le savoir.
+                      final success = await _db.updateInterventionStatus(
+                          id, AppConstants.statusCancelled);
+                      if (!dialogContext.mounted) return;
+                      if (success) {
+                        Navigator.pop(dialogContext);
+                        if (mounted) context.go('/user/home');
+                      } else {
+                        setDialogState(() => cancelling = false);
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Impossible d\'annuler pour l\'instant. Contactez le prestataire directement si besoin.'),
+                          ),
+                        );
+                      }
+                    },
+              child: cancelling
+                  ? const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Oui, annuler',
+                      style: TextStyle(color: AppColors.error)),
+            ),
+          ],
+        ),
       ),
     );
   }

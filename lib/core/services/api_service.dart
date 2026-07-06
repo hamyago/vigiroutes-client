@@ -220,9 +220,20 @@ class ApiService {
     catch (_) {}
   }
 
-  Future<void> updateInterventionStatus(String id, String status) async {
-    try { await post('/user/interventions/$id/cancel', data: {'reason': status}); }
-    catch (_) {}
+  // BUG CORRIGÉ : le catch(_) {} avalait TOUTE erreur (y compris un
+  // refus légitime du serveur), et l'écran qui appelait cette méthode ne
+  // vérifiait jamais si l'annulation avait réellement réussi avant
+  // d'afficher "annulé" et de retourner à l'accueil. Résultat : un client
+  // pouvait croire avoir annulé alors que l'intervention restait active
+  // sur le serveur, laissant le prestataire continuer sans le savoir.
+  // Renvoie maintenant un booléen que l'appelant DOIT vérifier.
+  Future<bool> updateInterventionStatus(String id, String status) async {
+    try {
+      await post('/user/interventions/$id/cancel', data: {'reason': status});
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ── Emergency ─────────────────────────────────────────────────────────────
