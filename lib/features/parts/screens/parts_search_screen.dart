@@ -90,47 +90,33 @@ class _PartsSearchScreenState extends State<PartsSearchScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Form(
-                    child: TextFormField(
-                      controller: _searchCtrl,
-                      textInputAction: TextInputAction.search,
-                      onFieldSubmitted: (_) => _search(),
-                      decoration: InputDecoration(
-                        hintText: 'Ex: plaquette de frein, batterie, pneu...',
-                        filled: true,
-                        fillColor: Colors.white,
-                        // SIMPLIFIÉ : retour à une icône décorative simple
-                        // (le bouton "Chercher" à côté suffit pour
-                        // déclencher la recherche) — un IconButton comme
-                        // prefixIcon pouvait entrer en conflit avec la
-                        // zone tactile du champ lui-même.
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: AppColors.border),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: AppColors.border),
-                      ),
+            // REFAIT DE ZÉRO : la Row/TextFormField personnalisée se
+            // rendait cassée (trait fin + icône flottante, ni saisie ni
+            // clavier possibles) de façon reproductible sur les deux
+            // apps malgré plusieurs correctifs ciblés. Remplacé par le
+            // widget SearchBar natif de Material 3 — composant standard
+            // de Flutter, largement testé, qui gère nativement toute
+            // l'interaction clavier/tactile sans décoration personnalisée.
+            child: SearchBar(
+              controller: _searchCtrl,
+              hintText: 'Ex: plaquette de frein, batterie, pneu...',
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _search(),
+              leading: const Icon(Icons.search),
+              trailing: [
+                if (_searching)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward),
+                    onPressed: _search,
                   ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _searching ? null : _search,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                  ),
-                  child: _searching
-                      ? const SizedBox(width: 18, height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Chercher'),
-                ),
               ],
             ),
           ),
