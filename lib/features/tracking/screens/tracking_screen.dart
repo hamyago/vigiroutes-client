@@ -42,19 +42,24 @@ class _TrackingScreenState extends State<TrackingScreen> {
     // convertit en image bitmap utilisable comme icône de marqueur —
     // technique standard pour des marqueurs personnalisés avec
     // google_maps_flutter (pas besoin d'un fichier image à part).
-    const double size = 110;
+    // MODIFIÉ : réduit de 75% (110 → 28) suite au retour utilisateur —
+    // le marqueur était trop grand sur la carte.
+    const double size = 28;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
     final bgPaint = Paint()..color = AppColors.primary;
     canvas.drawCircle(const Offset(size / 2, size / 2), size / 2, bgPaint);
+    // MODIFIÉ : épaisseur du contour proportionnelle (au lieu d'une
+    // valeur fixe de 4px, disproportionnée sur un marqueur plus petit).
+    final strokeWidth = size * 0.036;
     canvas.drawCircle(
       const Offset(size / 2, size / 2),
-      size / 2 - 4,
+      size / 2 - strokeWidth,
       Paint()
         ..color = Colors.white
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 4,
+        ..strokeWidth = strokeWidth,
     );
 
     final textPainter = TextPainter(textDirection: TextDirection.ltr);
