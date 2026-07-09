@@ -147,6 +147,23 @@ class ProviderModel {
 
 // ── InterventionModel ─────────────────────────────────────────────────────────
 
+class AssignedAssistant {
+  final String name;
+  final String? phone;
+  final String? photoUrl;
+
+  const AssignedAssistant({required this.name, this.phone, this.photoUrl});
+
+  factory AssignedAssistant.fromJson(Map<String, dynamic> json) => AssignedAssistant(
+        name:     (json['name'] ?? '').toString(),
+        phone:    json['phone']?.toString(),
+        photoUrl: json['photo_url']?.toString(),
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'name': name, 'phone': phone, 'photo_url': photoUrl};
+}
+
 class InterventionModel {
   final String id;
   final String userId;
@@ -165,6 +182,7 @@ class InterventionModel {
   final String paymentMethod;
   final String paymentStatus;
   final ProviderModel? provider;
+  final AssignedAssistant? assignedAssistant;
   final String? providerName;
   final String? providerPhone;
   final DateTime createdAt;
@@ -189,6 +207,7 @@ class InterventionModel {
     required this.paymentMethod,
     required this.paymentStatus,
     this.provider,
+    this.assignedAssistant,
     this.providerName,
     this.providerPhone,
     required this.createdAt,
@@ -225,6 +244,9 @@ class InterventionModel {
       paymentMethod:    json['payment_method'] as String? ?? 'cash',
       paymentStatus:    json['payment_status'] as String? ?? 'pending',
       provider: providerJson != null ? ProviderModel.fromJson(providerJson) : null,
+      assignedAssistant: json['assigned_assistant'] != null
+          ? AssignedAssistant.fromJson(json['assigned_assistant'] as Map<String, dynamic>)
+          : null,
       providerName:     json['provider_name'] as String?
                             ?? providerJson?['name'] as String?,
       providerPhone:    json['provider_phone'] as String?
@@ -248,6 +270,7 @@ class InterventionModel {
     'provider_longitude': providerLongitude, 'distance_km': distanceKm,
     'total_price': totalPrice, 'commission': commission,
     'payment_method': paymentMethod, 'payment_status': paymentStatus,
+    'assigned_assistant': assignedAssistant?.toJson(),
     'created_at': createdAt.toIso8601String(),
   };
 }

@@ -464,6 +464,50 @@ class _TrackingScreenState extends State<TrackingScreen> {
                           ],
                         ),
 
+                        // AJOUTÉ : quand le prestataire délègue à un
+                        // membre de son garage, le client voit qui va
+                        // réellement intervenir (nom + photo).
+                        if (i.assignedAssistant != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: Colors.white,
+                                backgroundImage: (i.assignedAssistant!.photoUrl != null &&
+                                        i.assignedAssistant!.photoUrl!.isNotEmpty)
+                                    ? NetworkImage(i.assignedAssistant!.photoUrl!)
+                                    : null,
+                                child: (i.assignedAssistant!.photoUrl == null ||
+                                        i.assignedAssistant!.photoUrl!.isEmpty)
+                                    ? const Text('🧑‍🔧', style: TextStyle(fontSize: 16))
+                                    : null,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Intervenant',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.textMuted)),
+                                    Text(i.assignedAssistant!.name,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 14)),
+                                  ],
+                                ),
+                              ),
+                            ]),
+                          ),
+                        ],
+
                         if (i.isActive) ...[
                           const SizedBox(height: 16),
                           const Divider(),
