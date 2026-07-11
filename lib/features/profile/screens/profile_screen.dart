@@ -171,7 +171,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 _MenuItem(
                   icon: Icons.article_outlined,
                   label: 'Conditions d\'utilisation',
-                  onTap: () => context.push('/user/terms'),
+                  onTap: () => launchUrl(
+                    Uri.parse('https://vigiroutes.com/cgu'),
+                    mode: LaunchMode.externalApplication,
+                  ),
                 ),
               ],
             ),

@@ -28,6 +28,8 @@ import '../../features/emergency/controllers/emergency_controller.dart';
 import '../../core/models/models.dart';
 import '../../core/services/notification_router_service.dart';
 import '../../features/home/screens/city_welcome_screen.dart';
+import '../../features/legal/screens/privacy_policy_screen.dart';
+import '../../features/legal/screens/faq_screen.dart';
 
 class UserShell extends StatefulWidget {
   final Widget child;
@@ -235,6 +237,12 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
             path: '/user/city-welcome',
             builder: (ctx, s) => CityWelcomeScreen.fromNotificationData(
                 Map<String, dynamic>.from(s.extra as Map))),
+        GoRoute(
+            path: '/user/privacy',
+            builder: (_, __) => const PrivacyPolicyScreen()),
+        GoRoute(
+            path: '/user/faq',
+            builder: (_, __) => const FaqScreen()),
       ],
     );
 
