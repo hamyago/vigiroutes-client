@@ -21,12 +21,22 @@ class ActionChoiceScreen extends StatelessWidget {
             children: [
               _ChoiceCard(
                 color: const Color(0xFFFF6B35),
-                icon: Icons.build,
+                icon: Icons.bolt,
                 title: 'Me faire dépanner',
-                subtitle: 'Trouver un prestataire près de vous\n(pneu, batterie, remorquage…)',
-                onTap: () => context.pushReplacement('/user/request'),
+                subtitle: 'On vous envoie automatiquement le prestataire\nle mieux noté et le plus proche',
+                onTap: () =>
+                    context.pushReplacement('/user/request?mode=auto'),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              _ChoiceCard(
+                color: const Color(0xFF4299E1),
+                icon: Icons.storefront,
+                title: 'Choisir mon garage',
+                subtitle: 'Sélectionner vous-même un prestataire\nparmi ceux à proximité',
+                onTap: () =>
+                    context.pushReplacement('/user/request?mode=manual'),
+              ),
+              const SizedBox(height: 16),
               _ChoiceCard(
                 color: const Color(0xFFE53E3E),
                 icon: Icons.emergency,

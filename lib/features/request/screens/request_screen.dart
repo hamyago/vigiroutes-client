@@ -26,7 +26,12 @@ double _estimateNum(dynamic v) {
 
 class RequestScreen extends StatefulWidget {
   final ProviderModel? preselectedProvider;
-  const RequestScreen({super.key, this.preselectedProvider});
+  final RequestMode mode;
+  const RequestScreen({
+    super.key,
+    this.preselectedProvider,
+    this.mode = RequestMode.manual,
+  });
 
   @override
   State<RequestScreen> createState() => _RequestScreenState();
@@ -55,6 +60,7 @@ class _RequestScreenState extends State<RequestScreen> {
       FirebaseCrashlytics.instance.log('RequestScreen: appel ctrl.initialize()');
       await context.read<RequestController>().initialize(
             preselectedProvider: widget.preselectedProvider,
+            mode: widget.mode,
           );
       _initializeDone = true;
       FirebaseCrashlytics.instance.log('RequestScreen: ctrl.initialize() terminé');
@@ -577,19 +583,25 @@ class _ConfirmStep extends StatelessWidget {
                 _Row('🛠️ Service',
                     '${ctrl.selectedService?.emoji} ${ctrl.selectedService?.name}'),
                 const Divider(height: 20),
-                _Row('👨‍🔧 Prestataire',
-                    ctrl.selectedProvider?.name ?? '-'),
-                _Row('📍 Distance',
-                    '${_estimateNum(estimate?['distance_km']).toStringAsFixed(1)} km'),
+                if (ctrl.isAuto)
+                  _Row('👨‍🔧 Prestataire',
+                      'Le mieux noté & le plus proche')
+                else ...[
+                  _Row('👨‍🔧 Prestataire',
+                      ctrl.selectedProvider?.name ?? '-'),
+                  _Row('📍 Distance',
+                      '${_estimateNum(estimate?['distance_km']).toStringAsFixed(1)} km'),
+                ],
                 const Divider(height: 20),
                 _Row('Prix de base',
                     PriceCalculator.formatFcfa(
                         _estimateNum(estimate?['base_price']))),
-                _Row('Déplacement',
-                    PriceCalculator.formatFcfa(
-                        _estimateNum(estimate?['km_cost']))),
+                if (!ctrl.isAuto)
+                  _Row('Déplacement',
+                      PriceCalculator.formatFcfa(
+                          _estimateNum(estimate?['km_cost']))),
                 const Divider(height: 20),
-                _Row('TOTAL',
+                _Row(ctrl.isAuto ? 'ESTIMÉ (à partir de)' : 'TOTAL',
                     PriceCalculator.formatFcfa(
                         _estimateNum(estimate?['total_price'])),
                     bold: true,
@@ -637,10 +649,12 @@ class _ConfirmStep extends StatelessWidget {
             },
           ),
           const SizedBox(height: 16),
-          const Center(
+          Center(
             child: Text(
-              'Le prestataire sera notifié immédiatement.',
-              style: TextStyle(
+              ctrl.isAuto
+                  ? 'Nous contactons le meilleur prestataire disponible près de vous. Le déplacement sera ajouté une fois le prestataire trouvé.'
+                  : 'Le prestataire sera notifié immédiatement.',
+              style: const TextStyle(
                   color: AppColors.textMuted, fontSize: 12),
               textAlign: TextAlign.center,
             ),

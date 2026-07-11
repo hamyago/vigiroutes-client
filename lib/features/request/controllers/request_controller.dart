@@ -9,6 +9,8 @@ import '../../../core/services/service_type_service.dart';
 
 enum RequestStep { selectService, selectProvider, confirm }
 
+enum RequestMode { auto, manual }
+
 enum SubmitError { none, generic }
 
 class RequestController extends ChangeNotifier {
@@ -26,6 +28,7 @@ class RequestController extends ChangeNotifier {
   String?               _createdInterventionId;
   LatLng?               _userPosition;
   String?               _userAddress;
+  RequestMode           _mode          = RequestMode.manual;
 
   RequestStep           get step                   => _step;
   ServiceTypeModel?     get selectedService        => _selectedService;
@@ -38,12 +41,17 @@ class RequestController extends ChangeNotifier {
   String?               get createdInterventionId  => _createdInterventionId;
   LatLng?               get userPosition           => _userPosition;
   String?               get userAddress            => _userAddress;
+  bool                  get isAuto                 => _mode == RequestMode.auto;
 
   // Charger depuis l'API au lieu des données statiques
   List<ServiceTypeModel> get services =>
       ServiceTypeService.instance.serviceTypes;
 
-  Future<void> initialize({ProviderModel? preselectedProvider}) async {
+  Future<void> initialize({
+    ProviderModel? preselectedProvider,
+    RequestMode mode = RequestMode.manual,
+  }) async {
+    _mode        = mode;
     _step        = RequestStep.selectService;
     _submitError = SubmitError.none;
     _error       = null;
@@ -89,6 +97,18 @@ class RequestController extends ChangeNotifier {
 
   void selectService(ServiceTypeModel service) {
     _selectedService = service;
+
+    // Mode auto : aucun choix de prestataire. On va directement à la
+    // confirmation avec une estimation locale indicative ; le prix définitif
+    // (avec le déplacement) sera calculé par le serveur à l'affectation du
+    // prestataire trouvé.
+    if (_mode == RequestMode.auto) {
+      _loadLocalEstimate(service);
+      _step = RequestStep.confirm;
+      notifyListeners();
+      return;
+    }
+
     if (_selectedProvider != null) {
       // Prestataire déjà choisi (préselection) : on saute directement à la
       // confirmation au lieu de redemander de choisir un prestataire.
@@ -99,6 +119,23 @@ class RequestController extends ChangeNotifier {
       _step = RequestStep.selectProvider;
       notifyListeners();
     }
+  }
+
+  /// Estimation indicative sans prestataire (mode auto) : prix de base
+  /// uniquement. Le déplacement (km) reste inconnu tant qu'aucun prestataire
+  /// n'a accepté.
+  void _loadLocalEstimate(ServiceTypeModel service) {
+    final base  = service.defaultBasePrice;
+    final total = base > service.minimumTotal ? base : service.minimumTotal;
+    _estimate = {
+      'distance_km': 0,
+      'base_price':  base,
+      'km_cost':     0,
+      'subtotal':    base,
+      'total_price': total,
+    };
+    _estimateLoading = false;
+    _error           = null;
   }
 
   Future<void> selectProvider(ProviderModel provider) async {
@@ -151,7 +188,9 @@ class RequestController extends ChangeNotifier {
     _submitError = SubmitError.none;
     _error       = null;
     if (_step == RequestStep.confirm) {
-      _step = RequestStep.selectProvider;
+      _step = _mode == RequestMode.auto
+          ? RequestStep.selectService
+          : RequestStep.selectProvider;
     } else if (_step == RequestStep.selectProvider) {
       _step = RequestStep.selectService;
     }
@@ -159,9 +198,9 @@ class RequestController extends ChangeNotifier {
   }
 
   Future<bool> submitRequest({required UserModel user}) async {
-    if (_selectedService == null ||
-        _selectedProvider == null ||
-        _userPosition == null) return false;
+    if (_selectedService == null || _userPosition == null) return false;
+    // En mode manuel, un prestataire est requis ; en mode auto, non.
+    if (_mode == RequestMode.manual && _selectedProvider == null) return false;
 
     _isLoading   = true;
     _error       = null;
@@ -172,7 +211,7 @@ class RequestController extends ChangeNotifier {
       final data = await _api.createIntervention({
         'service_type_id':   _selectedService!.id,
         'service_type_name': _selectedService!.name,
-        'provider_id':       _selectedProvider!.id,
+        if (_selectedProvider != null) 'provider_id': _selectedProvider!.id,
         'user_latitude':     _userPosition!.latitude,
         'user_longitude':    _userPosition!.longitude,
         'user_address':      _userAddress,

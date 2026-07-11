@@ -196,11 +196,18 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
             builder: (_, __) => const ActionChoiceScreen()),
         GoRoute(
             path: '/user/request',
-            builder: (ctx, s) => ChangeNotifierProvider(
-                  create: (_) => RequestController(),
-                  child: RequestScreen(
-                      preselectedProvider: s.extra as ProviderModel?),
-                )),
+            builder: (ctx, s) {
+              final mode = s.uri.queryParameters['mode'] == 'auto'
+                  ? RequestMode.auto
+                  : RequestMode.manual;
+              return ChangeNotifierProvider(
+                create: (_) => RequestController(),
+                child: RequestScreen(
+                  preselectedProvider: s.extra as ProviderModel?,
+                  mode: mode,
+                ),
+              );
+            }),
         GoRoute(
             path: '/user/tracking/:id',
             builder: (ctx, s) => track.TrackingScreen(
