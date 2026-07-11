@@ -95,7 +95,17 @@ class _OtpScreenState extends State<OtpScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => context.pop(),
+          // Sécurisé : l'écran OTP est atteint via context.go (qui remplace
+          // la pile), donc il n'y a souvent rien à dépiler. Un pop() nu
+          // plantait alors (« There is nothing to pop »). On revient à la
+          // saisie du numéro à la place.
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/auth/phone');
+            }
+          },
         ),
       ),
       body: SafeArea(
