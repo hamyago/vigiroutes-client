@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
@@ -33,6 +34,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
   // NOUVEAU : évite de réafficher la popup du montant final à chaque
   // sondage/mise à jour une fois qu'elle a déjà été montrée une fois.
   bool _amountPopupShown = false;
+  // Évite de réafficher l'alerte "aucun prestataire" à chaque sondage.
+  bool _noProviderShown = false;
   // AJOUTÉ : marqueur voiture personnalisé pour le prestataire, au lieu
   // du pin orange par défaut de Google Maps.
   BitmapDescriptor? _carIcon;
@@ -123,6 +126,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         _intervention = _intervention?.copyWithWs(data);
       });
       _maybeShowAmountPopup();
+      _maybeShowNoProviderAlert();
       final i = _intervention;
       if (i != null &&
           i.providerLatitude != null &&
@@ -182,6 +186,47 @@ class _TrackingScreenState extends State<TrackingScreen> {
     });
   }
 
+  // Alerte prominente quand le dispatch n'a trouvé aucun prestataire.
+  // La notification push pouvant passer inaperçue (surtout app au premier
+  // plan), on double d'un retour haptique fort + une popup bloquante.
+  void _maybeShowNoProviderAlert() {
+    final i = _intervention;
+    if (i == null || _noProviderShown) return;
+    if (!i.noProviderAvailable) return;
+
+    _noProviderShown = true;
+    HapticFeedback.heavyImpact();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          icon: const Text('😔', style: TextStyle(fontSize: 40)),
+          title: const Text('Aucun prestataire disponible'),
+          content: const Text(
+            'Tous les prestataires proches sont occupés ou indisponibles '
+            'pour le moment. Vous pouvez réessayer dans quelques minutes.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Fermer'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                context.go('/user/action');
+              },
+              child: const Text('Réessayer'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
   Future<void> _loadInitial() async {
     try {
       final data = await _db
@@ -190,6 +235,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
       if (mounted) {
         setState(() => _intervention = InterventionModel.fromJson(data));
         _maybeShowAmountPopup();
+        _maybeShowNoProviderAlert();
       }
     } catch (e) {
       debugPrint('[TrackingScreen] Erreur chargement initial : $e');
@@ -219,6 +265,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         final updated = InterventionModel.fromJson(data);
         setState(() => _intervention = updated);
         _maybeShowAmountPopup();
+        _maybeShowNoProviderAlert();
         if (updated.providerLatitude != null &&
             updated.providerLongitude != null) {
           _mapCtrl?.animateCamera(
@@ -406,7 +453,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Status badge
-                        _StatusBadge(status: i.status),
+                        _StatusBadge(
+                          status: i.status,
+                          dispatchStatus: i.dispatchStatus,
+                        ),
                         const SizedBox(height: 16),
 
                         // Provider info
@@ -423,7 +473,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    i.providerName ?? 'En attente...',
+                                    i.noProviderAvailable
+                                        ? 'Aucun prestataire disponible'
+                                        : (i.providerName ?? 'En attente...'),
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 16,
@@ -630,11 +682,17 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
 class _StatusBadge extends StatelessWidget {
   final String status;
-  const _StatusBadge({required this.status});
+  final String? dispatchStatus;
+  const _StatusBadge({required this.status, this.dispatchStatus});
 
   @override
   Widget build(BuildContext context) {
-    final (label, color, icon) = switch (status) {
+    // Le dispatch n'a trouvé personne : on l'affiche clairement, quel que
+    // soit le statut brut (qui reste 'pending' pour permettre un réessai).
+    final bool noProvider = dispatchStatus == 'no_provider_available';
+    final (label, color, icon) = noProvider
+        ? ('Prestataire indisponible', AppColors.error, '😔')
+        : switch (status) {
       'pending' => ('En attente d\'acceptation', AppColors.warning, '⏳'),
       // 'dispatching' : le backend a envoye la demande a un prestataire
       // precis et attend sa reponse (ajoute suite au correctif du dispatch

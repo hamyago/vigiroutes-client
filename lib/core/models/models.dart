@@ -185,6 +185,7 @@ class InterventionModel {
   final AssignedAssistant? assignedAssistant;
   final String? providerName;
   final String? providerPhone;
+  final String? dispatchStatus;
   final DateTime createdAt;
   final DateTime? acceptedAt;
   final DateTime? completedAt;
@@ -210,6 +211,7 @@ class InterventionModel {
     this.assignedAssistant,
     this.providerName,
     this.providerPhone,
+    this.dispatchStatus,
     required this.createdAt,
     this.acceptedAt,
     this.completedAt,
@@ -223,6 +225,9 @@ class InterventionModel {
   bool get isCancelled  => status == 'cancelled';
 
   String? get dispatchedProviderId => providerId;
+
+  /// Le dispatch n'a trouvé aucun prestataire (tous occupés / indisponibles).
+  bool get noProviderAvailable => dispatchStatus == 'no_provider_available';
 
   factory InterventionModel.fromJson(Map<String, dynamic> json) {
     final providerJson = json['provider'] as Map<String, dynamic>?;
@@ -251,6 +256,7 @@ class InterventionModel {
                             ?? providerJson?['name'] as String?,
       providerPhone:    json['provider_phone'] as String?
                             ?? providerJson?['phone'] as String?,
+      dispatchStatus:   json['dispatch_status'] as String?,
       createdAt:        DateTime.parse(json['created_at'] as String),
       acceptedAt:       json['accepted_at'] != null
                             ? DateTime.parse(json['accepted_at'] as String) : null,
@@ -270,6 +276,7 @@ class InterventionModel {
     'provider_longitude': providerLongitude, 'distance_km': distanceKm,
     'total_price': totalPrice, 'commission': commission,
     'payment_method': paymentMethod, 'payment_status': paymentStatus,
+    'dispatch_status': dispatchStatus,
     'assigned_assistant': assignedAssistant?.toJson(),
     'created_at': createdAt.toIso8601String(),
   };
