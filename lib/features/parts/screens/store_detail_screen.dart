@@ -84,12 +84,19 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
           title: const Text('✅ Commande envoyée !'),
           content: const Text('Le magasin va préparer votre commande. Vous pourrez suivre son statut depuis "Mes commandes".'),
           actions: [
-            ElevatedButton(
+            TextButton(
               onPressed: () {
                 Navigator.pop(context);
                 context.pop();
               },
-              child: const Text('OK'),
+              child: const Text('Fermer'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                context.pushReplacement('/user/parts/orders');
+              },
+              child: const Text('Voir mes commandes'),
             ),
           ],
         ),

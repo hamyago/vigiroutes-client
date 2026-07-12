@@ -32,12 +32,22 @@ class _PartOrdersScreenState extends State<PartOrdersScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final data = await ApiService.instance.getMyPartOrders();
-    if (!mounted) return;
-    setState(() {
-      _orders = data.map((e) => PartOrderModel.fromJson(e as Map<String, dynamic>)).toList();
-      _loading = false;
-    });
+    try {
+      final data = await ApiService.instance.getMyPartOrders();
+      if (!mounted) return;
+      setState(() {
+        _orders = data
+            .map((e) => PartOrderModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _orders = [];
+        _loading = false;
+      });
+    }
   }
 
   @override
