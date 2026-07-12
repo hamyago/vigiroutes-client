@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
@@ -17,6 +18,7 @@ class PartsSearchScreen extends StatefulWidget {
 class _PartsSearchScreenState extends State<PartsSearchScreen> {
   final _searchCtrl = TextEditingController();
   final _location = LocationService();
+  Timer? _debounce;
 
   List<StoreModel> _results = [];
   bool _searching = false;
@@ -25,8 +27,27 @@ class _PartsSearchScreenState extends State<PartsSearchScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  /// Recherche dynamique : relancée à chaque frappe, avec un anti-rebond de
+  /// 350 ms pour ne pas appeler l'API à chaque lettre. En dessous de 2
+  /// caractères, on vide les résultats sans erreur (l'erreur ne s'affiche
+  /// que sur une validation explicite).
+  void _onQueryChanged(String value) {
+    _debounce?.cancel();
+    final q = value.trim();
+    if (q.length < 2) {
+      setState(() {
+        _results  = [];
+        _searched = false;
+        _error    = null;
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 350), _search);
   }
 
   Future<void> _search() async {
@@ -101,6 +122,7 @@ class _PartsSearchScreenState extends State<PartsSearchScreen> {
               controller: _searchCtrl,
               hintText: 'Ex: plaquette de frein, batterie, pneu...',
               textInputAction: TextInputAction.search,
+              onChanged: _onQueryChanged,
               onSubmitted: (_) => _search(),
               leading: const Icon(Icons.search),
               trailing: [

@@ -200,20 +200,44 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                         ),
                         child: SafeArea(
                           top: false,
-                          child: Row(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  '$_itemCount article(s) — ${PriceCalculator.formatFcfa(_total)}',
-                                  style: const TextStyle(fontWeight: FontWeight.w700),
-                                ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    '$_itemCount article(s)',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    PriceCalculator.formatFcfa(_total),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              ElevatedButton(
-                                onPressed: _submitting ? null : _submitOrder,
-                                child: _submitting
-                                    ? const SizedBox(width: 18, height: 18,
-                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                    : const Text('Valider la commande'),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: _submitting ? null : _submitOrder,
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                  child: _submitting
+                                      ? const SizedBox(
+                                          width: 18, height: 18,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2, color: Colors.white))
+                                      : const Text('Passer la commande'),
+                                ),
                               ),
                             ],
                           ),
