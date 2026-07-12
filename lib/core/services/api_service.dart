@@ -358,11 +358,18 @@ class ApiService {
     required String storeId,
     required List<Map<String, dynamic>> items,
     String? note,
+    double? deliveryLatitude,
+    double? deliveryLongitude,
+    String? deliveryAddress,
   }) async {
     final res = await post('/user/parts/orders', data: {
       'store_id': storeId,
       'items': items,
       if (note != null && note.isNotEmpty) 'note': note,
+      if (deliveryLatitude != null) 'delivery_latitude': deliveryLatitude,
+      if (deliveryLongitude != null) 'delivery_longitude': deliveryLongitude,
+      if (deliveryAddress != null && deliveryAddress.isNotEmpty)
+        'delivery_address': deliveryAddress,
     });
     return res.data as Map<String, dynamic>;
   }

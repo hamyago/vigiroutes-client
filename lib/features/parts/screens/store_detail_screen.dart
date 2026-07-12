@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/utils/price_calculator.dart';
 
 /// Détail d'un magasin : tous ses produits disponibles, sélection des
@@ -73,9 +74,21 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
 
     setState(() => _submitting = true);
     try {
+      // Position de livraison : on joint la position actuelle du client (et,
+      // au mieux, une adresse lisible) pour que le magasin sache où livrer.
+      final pos = await LocationService().getCurrentPosition();
+      String? address;
+      if (pos != null) {
+        address = await LocationService().getAddressFromCoords(
+          pos.latitude, pos.longitude,
+        );
+      }
       await ApiService.instance.createPartOrder(
         storeId: widget.storeId,
         items: items,
+        deliveryLatitude:  pos?.latitude,
+        deliveryLongitude: pos?.longitude,
+        deliveryAddress:   address,
       ).timeout(const Duration(seconds: 20));
       if (!mounted) return;
       await showDialog(
