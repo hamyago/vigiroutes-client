@@ -56,7 +56,9 @@ class _InterventionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (statusLabel, statusColor) = _statusInfo(intervention.status);
+    final (statusLabel, statusColor) = intervention.noProviderAvailable
+        ? ('Indisponible', AppColors.error)
+        : _statusInfo(intervention.status);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -128,6 +130,7 @@ class _InterventionTile extends StatelessWidget {
 
   (String, Color) _statusInfo(String status) => switch (status) {
         'pending'     => ('En attente', AppColors.warning),
+        'dispatching' => ('Recherche en cours', AppColors.warning),
         'accepted'    => ('Acceptee', AppColors.primary),
         'in_progress' => ('En cours', AppColors.success),
         'completed'   => ('Terminee', AppColors.success),
