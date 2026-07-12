@@ -126,6 +126,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   label: 'Mes avis',
                   onTap: () => context.push('/user/reviews'),
                 ),
+                _MenuItem(
+                  icon: Icons.receipt_long_outlined,
+                  label: 'Mes commandes de pièces',
+                  onTap: () => context.push('/user/parts/orders'),
+                ),
               ],
             ),
 
