@@ -10,7 +10,8 @@ import '../../../core/utils/price_calculator.dart';
 /// quantités, validation de la commande.
 class StoreDetailScreen extends StatefulWidget {
   final String storeId;
-  const StoreDetailScreen({super.key, required this.storeId});
+  final String? query;
+  const StoreDetailScreen({super.key, required this.storeId, this.query});
 
   @override
   State<StoreDetailScreen> createState() => _StoreDetailScreenState();
@@ -21,8 +22,23 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
   bool _loading = true;
   bool _error = false;
   bool _submitting = false;
+  bool _showAll = false; // en recherche : afficher tout le catalogue ou juste la pièce cherchée
 
   final Map<String, int> _quantities = {}; // productId -> quantité
+
+  /// Terme de recherche éventuel (nettoyé).
+  String get _q => (widget.query ?? '').trim().toLowerCase();
+
+  /// Produits affichés : filtrés sur la recherche si une requête est fournie
+  /// et que l'utilisateur n'a pas demandé « Voir tout ». Le panier, lui,
+  /// continue de compter sur l'ensemble du catalogue.
+  List<StoreProductModel> get _visibleProducts {
+    final all = _store?.products ?? <StoreProductModel>[];
+    if (_q.isEmpty || _showAll) return all;
+    final filtered =
+        all.where((p) => p.name.toLowerCase().contains(_q)).toList();
+    return filtered.isEmpty ? all : filtered;
+  }
 
   @override
   void initState() {
@@ -161,14 +177,35 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                               style: const TextStyle(color: AppColors.textSecondary, fontSize: 13))),
                         ]),
                       ),
+                    if (_q.isNotEmpty && !_showAll && _store!.products.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Résultats pour « ${widget.query} »',
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => setState(() => _showAll = true),
+                              child: const Text('Voir tout le magasin'),
+                            ),
+                          ],
+                        ),
+                      ),
                     Expanded(
-                      child: _store!.products.isEmpty
+                      child: _visibleProducts.isEmpty
                           ? const Center(child: Text('Aucun produit disponible pour l\'instant.'))
                           : ListView.builder(
                               padding: const EdgeInsets.all(16),
-                              itemCount: _store!.products.length,
+                              itemCount: _visibleProducts.length,
                               itemBuilder: (_, i) {
-                                final p = _store!.products[i];
+                                final p = _visibleProducts[i];
                                 final qty = _quantities[p.id] ?? 0;
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 10),

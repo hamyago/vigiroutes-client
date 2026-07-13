@@ -233,7 +233,10 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
             builder: (_, __) => const PartsSearchScreen()),
         GoRoute(
             path: '/user/parts/store/:id',
-            builder: (ctx, s) => StoreDetailScreen(storeId: s.pathParameters['id']!)),
+            builder: (ctx, s) => StoreDetailScreen(
+                  storeId: s.pathParameters['id']!,
+                  query: s.uri.queryParameters['q'],
+                )),
         GoRoute(
             path: '/user/parts/orders',
             builder: (_, __) => const PartOrdersScreen()),

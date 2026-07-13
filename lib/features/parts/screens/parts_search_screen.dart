@@ -158,7 +158,8 @@ class _PartsSearchScreenState extends State<PartsSearchScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (_, i) => _StoreCard(
                           store: _results[i],
-                          onTap: () => context.push('/user/parts/store/${_results[i].id}'),
+                          onTap: () => context.push(
+                              '/user/parts/store/${_results[i].id}?q=${Uri.encodeComponent(_searchCtrl.text.trim())}'),
                         ),
                       ),
           ),
