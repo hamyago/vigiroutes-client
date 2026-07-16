@@ -37,7 +37,7 @@ class EmergencyService {
       'description':description,
     };
 
-    final response = await _api.post('/emergency', data: body);
+    final response = await _api.post('/user/emergency', data: body);
     final data = response.data as Map<String, dynamic>;
     return EmergencyAlert.fromJson(data['alert'] as Map<String, dynamic>? ?? data);
   }

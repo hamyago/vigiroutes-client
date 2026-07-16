@@ -354,7 +354,7 @@ class _CountdownViewState extends State<_CountdownView> {
                     width: 110,
                     height: 110,
                     child: CircularProgressIndicator(
-                      value: count / 5,
+                      value: count / 30,
                       strokeWidth: 8,
                       backgroundColor: color.withValues(alpha: 0.2),
                       valueColor: AlwaysStoppedAnimation<Color>(color),

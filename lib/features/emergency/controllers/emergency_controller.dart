@@ -11,7 +11,7 @@ class EmergencyController extends ChangeNotifier {
 
   EmergencyState _state = EmergencyState.idle;
   EmergencyType? _selectedType;
-  int _countdown = 5;
+  int _countdown = 30;
   Timer? _timer;
   String? _alertId;
   String? _errorMessage;
@@ -35,7 +35,7 @@ class EmergencyController extends ChangeNotifier {
 
   void startCountdown(EmergencyType type) {
     _selectedType = type;
-    _countdown = 5;
+    _countdown = 30;
     _state = EmergencyState.countdown;
     notifyListeners();
 
@@ -55,7 +55,7 @@ class EmergencyController extends ChangeNotifier {
     _timer?.cancel();
     _state = EmergencyState.idle;
     _selectedType = null;
-    _countdown = 5;
+    _countdown = 30;
     _description = null;
     notifyListeners();
   }
@@ -106,7 +106,7 @@ class EmergencyController extends ChangeNotifier {
     _timer?.cancel();
     _state = EmergencyState.idle;
     _selectedType = null;
-    _countdown = 5;
+    _countdown = 30;
     _alertId = null;
     _errorMessage = null;
     _description = null;
