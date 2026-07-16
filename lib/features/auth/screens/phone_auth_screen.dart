@@ -22,7 +22,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   bool   _waitingForOtp = false; // ← nouveau flag
   bool   _cguAccepted   = false; // case CGU obligatoire
 
-  /// Format E.164 pour Firebase
+  /// Format E.164
   /// Numéros CI 10 chiffres avec 0 → +225XXXXXXXXXX
   String _buildE164(String input) {
     final digits = input.replaceAll(RegExp(r'\D'), '');
@@ -41,38 +41,26 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
            (digits.length == 9 && !digits.startsWith('0'));
   }
 
-  // ─── CORRECTION PRINCIPALE ──────────────────────────────────────────────────
-  // verifyPhoneNumber() est asynchrone : Firebase appelle codeSent()
-  // APRÈS que sendOtp() revient. On utilise un listener pour détecter
-  // le changement d'état et naviguer au bon moment.
+  // ─── Envoi OTP via Termii (backend API) ────────────────────────────────────
+  // Plus besoin du pattern listener Firebase : sendOtp() est maintenant
+  // un simple appel HTTP qui résout sa Future quand le SMS est envoyé.
   Future<void> _handleSendOtp(AuthController auth) async {
     if (_waitingForOtp) return;
     setState(() => _waitingForOtp = true);
 
-    void listener() {
-      if (!mounted) return;
-      if (auth.otpSent && auth.error == null) {
-        auth.removeListener(listener);
-        setState(() => _waitingForOtp = false);
-        context.go(
-          '/auth/otp',
-          extra: {
-            'phone':      _phoneNumber,
-            'isProvider': widget.isProvider,
-          },
-        );
-      } else if (auth.error != null && !auth.isLoading) {
-        auth.removeListener(listener);
-        setState(() => _waitingForOtp = false);
-      }
-    }
-
-    auth.addListener(listener);
     await auth.sendOtp(_phoneNumber);
 
-    if (mounted && !auth.isLoading && !auth.otpSent && auth.error == null) {
-      auth.removeListener(listener);
-      setState(() => _waitingForOtp = false);
+    if (!mounted) return;
+    setState(() => _waitingForOtp = false);
+
+    if (auth.otpSent && auth.error == null) {
+      context.go(
+        '/auth/otp',
+        extra: {
+          'phone':      _phoneNumber,
+          'isProvider': widget.isProvider,
+        },
+      );
     }
   }
   // ────────────────────────────────────────────────────────────────────────────
@@ -186,7 +174,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               const SizedBox(height: 8),
               Text(
                 _valid
-                    ? 'Numéro Firebase : $_phoneNumber'
+                    ? 'Numéro : $_phoneNumber'
                     : 'Saisissez 10 chiffres en commençant par 0',
                 style: TextStyle(
                   fontSize: 12,

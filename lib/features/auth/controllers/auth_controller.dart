@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,14 +8,16 @@ import '../../../core/services/realtime_service.dart';
 enum AuthState { unknown, authenticated, unauthenticated }
 
 class AuthController extends ChangeNotifier {
-  final _firebaseAuth = FirebaseAuth.instance;
-  final _api          = ApiService.instance;
+  final _api = ApiService.instance;
 
-  AuthState  _state          = AuthState.unknown;
+  AuthState  _state     = AuthState.unknown;
   UserModel? _user;
-  bool       _isLoading      = false;
+  bool       _isLoading = false;
   String?    _error;
-  String?    _verificationId;
+  bool       _otpSent   = false;
+
+  /// Numéro de téléphone pour lequel l'OTP a été envoyé.
+  String? _otpPhone;
 
   AuthState  get state      => _state;
   UserModel? get user       => _user;
@@ -25,7 +26,7 @@ class AuthController extends ChangeNotifier {
   bool       get isUser     => _user != null;
   bool       get isProvider => false;
   String?    get role       => _user != null ? 'user' : null;
-  bool       get otpSent    => _verificationId != null;
+  bool       get otpSent    => _otpSent;
 
   /// Vrai quand l'utilisateur est connecté mais n'a pas encore renseigné
   /// son nom (nouveau compte). Sert à l'envoyer vers l'écran de création
@@ -48,50 +49,35 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> _init() async {
-    final hasToken     = await _api.hasToken;
-    final firebaseUser = _firebaseAuth.currentUser;
-    if (hasToken && firebaseUser != null) {
-      await _refreshUser(firebaseUser);
+    final hasToken = await _api.hasToken;
+    if (hasToken) {
+      await _refreshUser();
     } else {
       _state = AuthState.unauthenticated;
       notifyListeners();
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════
+  //  OTP via Termii (backend API)
+  // ══════════════════════════════════════════════════════════════════════
+
+  /// Envoie un OTP au numéro donné via le backend → Termii.
   Future<void> sendOtp(String phoneNumber) async {
-    _isLoading      = true;
-    _error          = null;
-    _verificationId = null;
+    _isLoading = true;
+    _error     = null;
+    _otpSent   = false;
+    _otpPhone  = phoneNumber;
     notifyListeners();
 
     try {
-      await _firebaseAuth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        timeout: const Duration(seconds: 60),
-        verificationCompleted: (credential) async {
-          debugPrint('[Auth] verificationCompleted — auto sign-in');
-          await _signIn(credential);
-        },
-        verificationFailed: (e) {
-          debugPrint('[Auth] verificationFailed: ${e.code} — ${e.message}');
-          _error     = _friendlyFirebaseError(e.code, e.message);
-          _isLoading = false;
-          notifyListeners();
-        },
-        codeSent: (id, resendToken) {
-          debugPrint('[Auth] codeSent — verificationId recu');
-          _verificationId = id;
-          _isLoading      = false;
-          notifyListeners();
-        },
-        codeAutoRetrievalTimeout: (id) {
-          debugPrint('[Auth] codeAutoRetrievalTimeout');
-          _verificationId ??= id;
-        },
-      );
+      await _api.sendOtp(phoneNumber);
+      _otpSent   = true;
+      _isLoading = false;
+      notifyListeners();
     } catch (e) {
-      debugPrint('[Auth] sendOtp exception: $e');
-      _error     = 'Erreur inattendue lors de l\'envoi du code.';
+      debugPrint('[Auth] sendOtp error: $e');
+      _error     = _extractError(e, 'Erreur lors de l\'envoi du code.');
       _isLoading = false;
       notifyListeners();
     }
@@ -99,8 +85,9 @@ class AuthController extends ChangeNotifier {
 
   Future<void> resendOtp(String phone) => sendOtp(phone);
 
+  /// Vérifie l'OTP saisi et connecte/crée le client.
   Future<bool> verifyOtp(String otp) async {
-    if (_verificationId == null) {
+    if (_otpPhone == null) {
       _error = 'Session expirée. Veuillez renvoyer le code.';
       notifyListeners();
       return false;
@@ -108,81 +95,53 @@ class AuthController extends ChangeNotifier {
     _isLoading = true;
     _error     = null;
     notifyListeners();
-    return _signIn(PhoneAuthProvider.credential(
-      verificationId: _verificationId!,
-      smsCode: otp,
-    ));
-  }
 
-  Future<bool> _signIn(AuthCredential credential) async {
     try {
-      final uc      = await _firebaseAuth.signInWithCredential(credential);
-      final idToken = await uc.user!.getIdToken(false);
-      final fcmToken = await FirebaseMessaging.instance.getToken();
+      // Récupérer le token FCM (non-bloquant)
+      String? fcmToken;
+      try {
+        fcmToken = await FirebaseMessaging.instance
+            .getToken()
+            .timeout(const Duration(seconds: 8));
+      } catch (e) {
+        debugPrint('[Auth] getToken non-fatal: $e');
+      }
 
-      // Sauvegarder le token Firebase
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('firebase_token', idToken!);
-
-      final response = await _api.loginUser(
-        firebaseToken: idToken,
-        fcmToken:      fcmToken,
-        phone:         uc.user!.phoneNumber,
+      final response = await _api.verifyOtpUser(
+        phone:    _otpPhone!,
+        otp:      otp,
+        fcmToken: fcmToken,
       );
 
       _user      = UserModel.fromJson(response['user'] as Map<String, dynamic>);
       _state     = AuthState.authenticated;
       _isLoading = false;
-      await RealtimeService.instance.init(response['token'] as String);
+
+      // Initialiser le temps réel si un token est retourné
+      final token = response['token'];
+      if (token is String && token.isNotEmpty) {
+        try {
+          await RealtimeService.instance.init(token);
+        } catch (e) {
+          debugPrint('[Auth] RealtimeService.init non-fatal: $e');
+        }
+      }
+
       notifyListeners();
       return true;
-    } on FirebaseAuthException catch (e) {
-      debugPrint('[Auth] signIn error: ${e.code}');
-      _error     = _friendlyFirebaseError(e.code, e.message);
+
+    } catch (e) {
+      debugPrint('[Auth] verifyOtp error: $e');
+      _error     = _extractError(e, 'Code incorrect ou expiré.');
       _isLoading = false;
       notifyListeners();
       return false;
-    } catch (e) {
-      debugPrint('[Auth] signIn error: $e');
-      _error     = 'Impossible de se connecter au serveur.';
-      _isLoading = false;
-      _state     = AuthState.unauthenticated;
-      notifyListeners();
-      return false;  // ← était true (bug silencieux : succès affiché alors que le login a échoué)
     }
   }
 
-  Future<void> _refreshUser(User firebaseUser,
-      {String? name, String? phone}) async {
-    try {
-      // getIdToken(false) — pas de refresh réseau forcé
-      final idToken  = await firebaseUser.getIdToken(false);
-      final fcmToken = await FirebaseMessaging.instance.getToken();
-
-      // Sauvegarder le token Firebase
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('firebase_token', idToken!);
-
-      final response = await _api.loginUser(
-        firebaseToken: idToken,
-        name:          name,
-        phone:         phone ?? firebaseUser.phoneNumber,
-        fcmToken:      fcmToken,
-      );
-
-      _user      = UserModel.fromJson(response['user'] as Map<String, dynamic>);
-      _state     = AuthState.authenticated;
-      _isLoading = false;
-      await RealtimeService.instance.init(response['token'] as String);
-      notifyListeners();
-    } catch (e) {
-      debugPrint('[Auth] _refreshUser error: $e');
-      _error     = 'Impossible de se connecter au serveur.';
-      _isLoading = false;
-      _state     = AuthState.unauthenticated;
-      notifyListeners();
-    }
-  }
+  // ══════════════════════════════════════════════════════════════════════
+  //  Profil & session
+  // ══════════════════════════════════════════════════════════════════════
 
   Future<void> completeUserProfile(
       {required String name, String? whatsapp}) async {
@@ -194,7 +153,7 @@ class AuthController extends ChangeNotifier {
         'name': name,
         if (whatsapp != null && whatsapp.isNotEmpty) 'whatsapp': whatsapp,
       });
-      await refreshUser(); // GET /user/me → _user à jour, state authenticated
+      await refreshUser();
     } catch (e) {
       debugPrint('[Auth] completeUserProfile: $e');
       _error = 'Impossible d\'enregistrer le profil. Réessayez.';
@@ -212,9 +171,7 @@ class AuthController extends ChangeNotifier {
     required double longitude,
   }) async {}
 
-  /// Recharge le profil depuis GET /user/me (sans repasser par le login,
-  /// pour ne pas risquer d'écraser des champs). Propage l'erreur afin que
-  /// les écrans appelants puissent l'afficher.
+  /// Recharge le profil depuis GET /user/me.
   Future<void> refreshUser() async {
     try {
       final data = await _api.getMe();
@@ -229,31 +186,43 @@ class AuthController extends ChangeNotifier {
 
   Future<void> logout() async {
     await _api.logout();
-    await _firebaseAuth.signOut();
     await RealtimeService.instance.disconnect();
-    _user  = null;
-    _state = AuthState.unauthenticated;
+    _user     = null;
+    _state    = AuthState.unauthenticated;
+    _otpSent  = false;
+    _otpPhone = null;
     notifyListeners();
   }
 
-  String _friendlyFirebaseError(String code, String? defaultMsg) {
-    switch (code) {
-      case 'invalid-phone-number':
-        return 'Numéro de téléphone invalide. Vérifiez le format (+225...).';
-      case 'too-many-requests':
-        return 'Trop de tentatives. Réessayez dans quelques minutes.';
-      case 'invalid-verification-code':
-        return 'Code incorrect. Vérifiez le SMS et réessayez.';
-      case 'session-expired':
-        return 'Session expirée. Veuillez renvoyer le code.';
-      case 'network-request-failed':
-        return 'Pas de connexion réseau. Vérifiez votre connexion.';
-      case 'billing-not-enabled':
-        return 'Service SMS non activé. Contactez le support.';
-      case 'operation-not-allowed':
-        return 'Authentification par SMS non activée dans Firebase Console.';
-      default:
-        return defaultMsg ?? 'Une erreur est survenue. Réessayez.';
+  // ── Privé ─────────────────────────────────────────────────────────────
+
+  Future<void> _refreshUser() async {
+    try {
+      final data = await _api.getMe();
+      _user  = UserModel.fromJson(data);
+      _state = AuthState.authenticated;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Auth] _refreshUser error: $e');
+      _state = AuthState.unauthenticated;
+      notifyListeners();
     }
+  }
+
+  /// Extrait un message d'erreur lisible depuis une exception Dio ou autre.
+  String _extractError(dynamic e, String fallback) {
+    try {
+      if (e is Exception && e.toString().contains('DioException')) {
+        // Dio met le message dans response.data['message']
+        final dynamic resp = (e as dynamic).response;
+        if (resp != null) {
+          final data = resp.data;
+          if (data is Map && data['message'] != null) {
+            return data['message'] as String;
+          }
+        }
+      }
+    } catch (_) {}
+    return fallback;
   }
 }

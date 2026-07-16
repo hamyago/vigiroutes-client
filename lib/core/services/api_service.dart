@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,34 +21,14 @@ class ApiService {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         final prefs = await SharedPreferences.getInstance();
+        final path  = options.path;
 
-        // Routes /user/* → Firebase ID token (jamais Sanctum)
-        // Routes /provider/* → Firebase ID token
-        // Routes /auth/* → aucun token (login/register)
-        // Autres → Sanctum token (admin, etc.)
-        final path = options.path;
-
-        if (path.startsWith('/auth/')) {
-          // Pas de token sur les routes d'authentification
-        } else if (path.startsWith('/user/') || path.startsWith('/provider/')) {
-          // Firebase ID token — toujours frais depuis Firebase
-          String? token;
-          try {
-            final u = fb.FirebaseAuth.instance.currentUser;
-            if (u != null) {
-              token = await u.getIdToken(false);
-              await prefs.setString('firebase_token', token!);
-            } else {
-              token = prefs.getString('firebase_token');
-            }
-          } catch (_) {
-            token = prefs.getString('firebase_token');
-          }
-          if (token != null) options.headers['Authorization'] = 'Bearer $token';
-        } else {
-          // Sanctum token (routes admin, etc.)
+        // Routes /auth/* → aucun token nécessaire
+        if (!path.startsWith('/auth/')) {
           final token = prefs.getString('sanctum_token');
-          if (token != null) options.headers['Authorization'] = 'Bearer $token';
+          if (token != null) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
         }
 
         if (kDebugMode) debugPrint('[API] ${options.method} ${options.path}');
@@ -65,62 +44,53 @@ class ApiService {
     ));
   }
 
-  // ── Token ─────────────────────────────────────────────────────────────────
+  // ── Token ─────────────────────────────────────────────────────────────
   Future<void> saveToken(String token) async =>
       (await SharedPreferences.getInstance()).setString('sanctum_token', token);
 
   Future<void> clearToken() async {
     final p = await SharedPreferences.getInstance();
     await p.remove('sanctum_token');
-    await p.remove('firebase_token');
   }
 
-  /// Retourne true si l'utilisateur a un token actif (Sanctum OU Firebase)
   Future<bool> get hasToken async {
     final prefs = await SharedPreferences.getInstance();
-    // Vérifier d'abord Sanctum (token API)
-    if (prefs.containsKey('sanctum_token')) return true;
-    // Sinon vérifier Firebase directement (session active)
-    return fb.FirebaseAuth.instance.currentUser != null;
+    return prefs.containsKey('sanctum_token');
   }
 
-  // ── HTTP ──────────────────────────────────────────────────────────────────
+  // ── HTTP ──────────────────────────────────────────────────────────────
   Future<Response> get(String path, {Map<String, dynamic>? params}) =>
       _dio.get(path, queryParameters: params);
   Future<Response> post(String path, {dynamic data}) => _dio.post(path, data: data);
   Future<Response> patch(String path, {dynamic data}) => _dio.patch(path, data: data);
   Future<Response> delete(String path) => _dio.delete(path);
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  Future<Map<String, dynamic>> loginUser({
-    required String firebaseToken,
-    String? name, String? phone, String? fcmToken,
-  }) async {
-    final res = await post('/auth/user/login', data: {
-      'firebase_token': firebaseToken,
-      if (name     != null) 'name':      name,
-      if (phone    != null) 'phone':     phone,
-      if (fcmToken != null) 'fcm_token': fcmToken,
-    });
-    await saveToken(res.data['token'] as String);
-    return res.data as Map<String, dynamic>;
+  // ══════════════════════════════════════════════════════════════════════
+  //  Auth — Termii OTP (nouveau flux)
+  // ══════════════════════════════════════════════════════════════════════
+
+  /// Demande l'envoi d'un OTP au numéro donné.
+  Future<void> sendOtp(String phone) async {
+    await post('/auth/otp/send', data: {'phone': phone});
   }
 
-  Future<Map<String, dynamic>> loginProvider({
-    required String firebaseToken,
-    String? name, String? phone, String? fcmToken,
-    List<String>? serviceTypes, String? sector,
+  /// Vérifie l'OTP et connecte/crée un CLIENT.
+  Future<Map<String, dynamic>> verifyOtpUser({
+    required String phone,
+    required String otp,
+    String? fcmToken,
+    String? name,
   }) async {
-    final res = await post('/auth/provider/login', data: {
-      'firebase_token': firebaseToken,
-      if (name         != null) 'name':          name,
-      if (phone        != null) 'phone':         phone,
-      if (fcmToken     != null) 'fcm_token':     fcmToken,
-      if (serviceTypes != null) 'service_types': serviceTypes,
-      if (sector       != null) 'sector':        sector,
+    final res = await post('/auth/otp/verify/user', data: {
+      'phone': phone,
+      'otp':   otp,
+      if (fcmToken != null) 'fcm_token': fcmToken,
+      if (name     != null) 'name':      name,
     });
-    await saveToken(res.data['token'] as String);
-    return res.data as Map<String, dynamic>;
+    final data = res.data as Map<String, dynamic>;
+    final token = data['token'] as String?;
+    if (token != null) await saveToken(token);
+    return data;
   }
 
   Future<void> logout() async {
@@ -128,7 +98,7 @@ class ApiService {
     await clearToken();
   }
 
-  // ── Providers ─────────────────────────────────────────────────────────────
+  // ── Providers ─────────────────────────────────────────────────────────
   Future<List<dynamic>> getNearbyProviders({
     required double latitude, required double longitude,
     double radiusKm = 10, String? serviceTypeId,
@@ -142,7 +112,7 @@ class ApiService {
     return (d as List?) ?? [];
   }
 
-  // ── Interventions ─────────────────────────────────────────────────────────
+  // ── Interventions ─────────────────────────────────────────────────────
   Future<Map<String, dynamic>> getEstimate({
     required String serviceTypeId, required String providerId,
     required double userLat, required double userLng,
@@ -174,8 +144,6 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  // AJOUTÉ : aucune méthode n'existait pour soumettre une note — seule
-  // getUserReviews() (lecture des avis reçus) était présente.
   Future<Map<String, dynamic>> submitReview({
     required String interventionId,
     required int    rating,
@@ -188,8 +156,6 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  // AJOUTÉ : historique des notifications (cloche sur l'accueil, jusqu'ici
-  // jamais branchée à rien).
   Future<List<dynamic>> getNotifications({int page = 1}) async {
     try {
       final res = await get('/user/notifications', params: {'page': page});
@@ -205,7 +171,6 @@ class ApiService {
     } catch (_) {}
   }
 
-  // AJOUTÉ : pour la pastille sur la cloche de l'accueil.
   Future<int> getUnreadNotificationsCount() async {
     try {
       final res = await get('/user/notifications/unread-count');
@@ -220,13 +185,6 @@ class ApiService {
     catch (_) {}
   }
 
-  // BUG CORRIGÉ : le catch(_) {} avalait TOUTE erreur (y compris un
-  // refus légitime du serveur), et l'écran qui appelait cette méthode ne
-  // vérifiait jamais si l'annulation avait réellement réussi avant
-  // d'afficher "annulé" et de retourner à l'accueil. Résultat : un client
-  // pouvait croire avoir annulé alors que l'intervention restait active
-  // sur le serveur, laissant le prestataire continuer sans le savoir.
-  // Renvoie maintenant un booléen que l'appelant DOIT vérifier.
   Future<bool> updateInterventionStatus(String id, String status) async {
     try {
       await post('/user/interventions/$id/cancel', data: {'reason': status});
@@ -236,7 +194,7 @@ class ApiService {
     }
   }
 
-  // ── Emergency ─────────────────────────────────────────────────────────────
+  // ── Emergency ─────────────────────────────────────────────────────────
   Future<Map<String, dynamic>> createEmergencyAlert({
     required String type, required double latitude, required double longitude,
     String? address, String? description,
@@ -249,10 +207,7 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  // ── User ──────────────────────────────────────────────────────────────────
-
-  /// Récupère le profil courant. Tolère deux formes de réponse :
-  /// `{ "user": {...} }` ou directement `{...}`.
+  // ── User ──────────────────────────────────────────────────────────────
   Future<Map<String, dynamic>> getMe() async {
     final res = await get('/user/me');
     final d = res.data;
@@ -262,8 +217,6 @@ class ApiService {
     return Map<String, dynamic>.from(d as Map);
   }
 
-  /// Met à jour le profil (nom, whatsapp, …). Les erreurs sont propagées
-  /// pour que l'UI puisse les afficher (ne plus masquer un échec backend).
   Future<Map<String, dynamic>> updateUser(Map<String, dynamic> data) async {
     final res = await patch('/user/me', data: data);
     final d = res.data;
@@ -273,8 +226,6 @@ class ApiService {
     return d is Map ? Map<String, dynamic>.from(d) : <String, dynamic>{};
   }
 
-  /// Envoie réellement la photo de profil en multipart (champ `photo`).
-  /// Retourne le profil mis à jour renvoyé par le backend.
   Future<Map<String, dynamic>> uploadUserPhoto(String filePath) async {
     final form = FormData.fromMap({
       'photo': await MultipartFile.fromFile(filePath, filename: 'profile.jpg'),
@@ -296,8 +247,6 @@ class ApiService {
     } catch (_) { return []; }
   }
 
-  // AJOUTÉ : aucune méthode n'existait pour voir les avis que LE CLIENT a
-  // lui-même donnés aux prestataires (seuls les avis reçus étaient visibles).
   Future<List<dynamic>> getReviewsGiven() async {
     try {
       final res = await get('/user/reviews/given');
@@ -307,10 +256,7 @@ class ApiService {
     } catch (_) { return []; }
   }
 
-  // ── Vehicles ──────────────────────────────────────────────────────────────
-
-  /// Liste les véhicules de l'utilisateur. Tolère `{ "data": [...] }`,
-  /// `{ "vehicles": [...] }` ou directement `[...]`.
+  // ── Vehicles ──────────────────────────────────────────────────────────
   Future<List<dynamic>> getVehicles() async {
     final res = await get('/user/vehicles');
     final d = res.data;
@@ -319,7 +265,6 @@ class ApiService {
     return (d as List?) ?? [];
   }
 
-  /// Ajoute un véhicule. Les erreurs sont propagées (plus de faux succès).
   Future<Map<String, dynamic>> addVehicle(Map<String, dynamic> data) async {
     final res = await post('/user/vehicles', data: data);
     final d = res.data;
@@ -332,8 +277,8 @@ class ApiService {
   Future<void> deleteVehicle(String id) async {
     await delete('/user/vehicles/$id');
   }
-  // AJOUTÉ : recherche et commande de pièces automobiles auprès des
-  // magasins à proximité (rayon 3 km par défaut).
+
+  // ── Parts ─────────────────────────────────────────────────────────────
   Future<List<dynamic>> searchParts({
     required String query,
     required double latitude,
