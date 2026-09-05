@@ -279,6 +279,22 @@ class ApiService {
   }
 
   // ── Parts ─────────────────────────────────────────────────────────────
+
+  /// Retourne les magasins les plus proches sans critère de pièce.
+  /// Utilisé pour pré-remplir l'écran de recherche avant toute saisie.
+  Future<List<dynamic>> getNearbyStores({
+    required double latitude,
+    required double longitude,
+    double radiusKm = 5,
+  }) async {
+    final res = await get('/user/parts/stores/nearby', params: {
+      'latitude':  latitude,
+      'longitude': longitude,
+      'radius_km': radiusKm,
+    });
+    return res.data as List<dynamic>;
+  }
+
   Future<List<dynamic>> searchParts({
     required String query,
     required double latitude,
