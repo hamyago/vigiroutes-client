@@ -102,29 +102,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
             const SizedBox(height: 24),
 
-            // VigiRoutes Client est 100% gratuit — plus d'abonnement.
-            const _FreeAppBanner(),
-
-            const SizedBox(height: 20),
-
             // Menu items
             _Section(
               title: 'Mon compte',
               items: [
                 _MenuItem(
-                  icon: Icons.directions_car_outlined,
-                  label: 'Mes véhicules',
-                  onTap: () => context.push('/user/vehicles'),
-                ),
-                _MenuItem(
                   icon: Icons.history,
                   label: 'Historique',
                   onTap: () => context.go('/user/history'),
-                ),
-                _MenuItem(
-                  icon: Icons.star_border,
-                  label: 'Mes avis',
-                  onTap: () => context.push('/user/reviews'),
                 ),
                 _MenuItem(
                   icon: Icons.receipt_long_outlined,
@@ -208,52 +193,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 }
 
-/// VigiRoutes Client est entièrement gratuit : liste complète des
-/// prestataires, demandes illimitées, alerte SAMU/Pompiers — tout est
-/// inclus sans abonnement. Cette bannière remplace l'ancienne carte
-/// "Passer à Premium".
-class _FreeAppBanner extends StatelessWidget {
-  const _FreeAppBanner();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [AppColors.success, Color(0xFF0D7A47)],
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            const Text('🎉', style: TextStyle(fontSize: 28)),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'VigiRoutes est 100% gratuit',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
-                  ),
-                  Text(
-                    'Tous les prestataires, demandes illimitées, alerte secours incluse',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-}
 
 class _Section extends StatelessWidget {
   final String title;
