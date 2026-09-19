@@ -1,5 +1,5 @@
-import '../../../core/services/api_service.dart';
-import '../../../core/models/vehicle_model.dart';
+import 'api_service.dart';
+import '../models/vehicle_model.dart';
 
 class CtService {
   CtService._();
