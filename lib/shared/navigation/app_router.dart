@@ -30,6 +30,8 @@ import '../../core/services/notification_router_service.dart';
 import '../../features/home/screens/city_welcome_screen.dart';
 import '../../features/legal/screens/privacy_policy_screen.dart';
 import '../../features/legal/screens/faq_screen.dart';
+import '../../features/ct/screens/ct_booking_flow_screen.dart';
+import '../../features/ct/controllers/ct_booking_controller.dart';
 
 class UserShell extends StatefulWidget {
   final Widget child;
@@ -253,6 +255,12 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
         GoRoute(
             path: '/user/faq',
             builder: (_, __) => const FaqScreen()),
+        GoRoute(
+            path: '/ct/booking',
+            builder: (_, __) => ChangeNotifierProvider(
+                  create: (_) => CtBookingController(),
+                  child: const CtBookingFlowScreen(),
+                )),
       ],
     );
 
