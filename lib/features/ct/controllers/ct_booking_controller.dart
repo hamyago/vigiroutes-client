@@ -168,17 +168,17 @@ class CtBookingController extends ChangeNotifier {
   }
 
   void _buildMapMarkers() {
-    _mapMarkers = _centers
-        .where((c) => c.latitude != null && c.longitude != null)
-        .map(
-          (c) => Marker(
-            markerId: MarkerId(c.id.toString()),
-            position: LatLng(c.latitude!, c.longitude!),
-            infoWindow: InfoWindow(title: c.name),
-            onTap: () => selectCenter(c),
-          ),
-        )
-        .toSet();
+    final markers = <Marker>{};
+    for (final c in _centers) {
+      if (c.latitude == null || c.longitude == null) continue;
+      markers.add(Marker(
+        markerId: MarkerId(c.id),
+        position: LatLng(c.latitude!, c.longitude!),
+        infoWindow: InfoWindow(title: c.name),
+        onTap: () => selectCenter(c),
+      ));
+    }
+    _mapMarkers = markers;
     notifyListeners();
   }
 
