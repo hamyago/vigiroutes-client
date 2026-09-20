@@ -1,3 +1,4 @@
+// ignore_for_file: always_specify_types
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -53,6 +54,7 @@ class CtBookingController extends ChangeNotifier {
 
   void selectCenter(TechnicalCenterModel c) {
     _selectedCenter = c;
+    _selectedSlot = null;
     notifyListeners();
   }
 
@@ -74,10 +76,11 @@ class CtBookingController extends ChangeNotifier {
 
   void selectDate(DateTime d) {
     _selectedDate = d;
+    _selectedSlot = null;
     notifyListeners();
     final dateStr = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     loadCenters(date: dateStr);
-    loadSlots(dateStr);
+    if (_selectedCenter != null) loadSlots(dateStr);
   }
 
   // ── Transport mode ────────────────────────────────────────────────────────
@@ -86,6 +89,7 @@ class CtBookingController extends ChangeNotifier {
 
   void setTransportMode(String v) {
     _transportMode = v;
+    if (v != 'driver') _keyHandoverAccepted = false;
     notifyListeners();
   }
 
@@ -98,20 +102,16 @@ class CtBookingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get canProceedStep3 => _transportMode != 'driver' || _keyHandoverAccepted;
+  bool get canProceedStep3 =>
+      _transportMode != 'driver' || _keyHandoverAccepted;
 
   // ── Fees ──────────────────────────────────────────────────────────────────
   double get towFee => 5000;
   double get driverFee => 8000;
 
-  double get bookingFee =>
-      _activeBooking?.bookingFee ?? 15000;
-
-  double get transportFee =>
-      _activeBooking?.transportFee ?? (_transportMode == 'tow' ? towFee : _transportMode == 'driver' ? driverFee : 0);
-
-  double get totalAmount =>
-      _activeBooking?.totalAmount ?? (bookingFee + transportFee);
+  double get bookingFee => _activeBooking?.bookingFee ?? 15000;
+  double get transportFee => _activeBooking?.transportFee ?? 0;
+  double get totalAmount => _activeBooking?.totalAmount ?? (bookingFee + transportFee);
 
   // ── Payment ───────────────────────────────────────────────────────────────
   String? _paymentMethod;
@@ -121,6 +121,10 @@ class CtBookingController extends ChangeNotifier {
     _paymentMethod = v;
     notifyListeners();
   }
+
+  String? _phone;
+  String? get phone => _phone;
+  void setPhone(String v) { _phone = v; notifyListeners(); }
 
   String? _paymentUrl;
   String? get paymentUrl => _paymentUrl;
@@ -170,10 +174,9 @@ class CtBookingController extends ChangeNotifier {
   void _buildMapMarkers() {
     final markers = <Marker>{};
     for (final c in _centers) {
-      if (c.latitude == null || c.longitude == null) continue;
       markers.add(Marker(
         markerId: MarkerId(c.id),
-        position: LatLng(c.latitude!, c.longitude!),
+        position: LatLng(c.displayLatitude, c.displayLongitude),
         infoWindow: InfoWindow(title: c.name),
         onTap: () => selectCenter(c),
       ));
@@ -206,6 +209,7 @@ class CtBookingController extends ChangeNotifier {
         date: date,
         lat: lat,
         lng: lng,
+        vehicleCategory: _selectedVehicle?.category ?? 'VP',
       );
       _buildMapMarkers();
     } catch (e) {
@@ -235,7 +239,7 @@ class CtBookingController extends ChangeNotifier {
     if (_selectedVehicle == null ||
         _selectedCenter == null ||
         _selectedSlot == null) {
-      _error = 'Please complete all selections.';
+      _error = 'Veuillez compléter toutes les sélections.';
       notifyListeners();
       return false;
     }
@@ -246,7 +250,10 @@ class CtBookingController extends ChangeNotifier {
       _activeBooking = await CtService.instance.initiateBooking(
         vehicleId: _selectedVehicle!.id,
         sessionId: _selectedSlot!.sessionId,
-        transportOption: _transportMode,
+        slotTime: _selectedSlot!.slotTime,
+        vehicleCategory: _selectedVehicle!.category,
+        transportMode: _transportMode,
+        keyHandoverAccepted: _keyHandoverAccepted,
       );
       _startCountdown();
       return true;
@@ -261,7 +268,7 @@ class CtBookingController extends ChangeNotifier {
 
   Future<bool> pay() async {
     if (_activeBooking == null || _paymentMethod == null) {
-      _error = 'No active booking or payment method selected.';
+      _error = 'Aucune réservation active ou méthode de paiement non sélectionnée.';
       notifyListeners();
       return false;
     }
@@ -269,7 +276,11 @@ class CtBookingController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      final result = await CtService.instance.initiatePayment(_activeBooking!.id);
+      final result = await CtService.instance.initiatePayment(
+        _activeBooking!.id,
+        paymentMethod: _paymentMethod!,
+        phone: _phone,
+      );
       _paymentUrl = result['payment_url'] as String?;
       _qrCodeUrl = CtService.instance.qrCodeUrl(_activeBooking!.id);
       return true;
@@ -298,6 +309,7 @@ class CtBookingController extends ChangeNotifier {
     _transportMode = 'self';
     _keyHandoverAccepted = false;
     _paymentMethod = null;
+    _phone = null;
     _paymentUrl = null;
     _qrCodeUrl = null;
     _activeBooking = null;
