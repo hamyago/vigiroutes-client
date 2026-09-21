@@ -199,9 +199,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   enabled: true,
                   onPressed: () async {
                     if (!_formKey.currentState!.validate()) return;
+                    // Capturer les objets dépendants du context AVANT tout await
+                    final messenger = ScaffoldMessenger.of(context);
+                    final router    = GoRouter.of(context);
                     if (widget.isProvider) {
                       if (_selectedServices.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           const SnackBar(content: Text(
                               'Sélectionnez au moins un type de service.')),
                         );
@@ -210,7 +213,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       if (_lat == null) {
                         await _getLocation();
                         if (_lat == null && mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          messenger.showSnackBar(
                             const SnackBar(content: Text(
                                 'La localisation est requise.')),
                           );
@@ -224,14 +227,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         latitude:     _lat!,
                         longitude:    _lng!,
                       );
-                      if (mounted) context.go('/provider/home');
+                      if (mounted) router.go('/provider/home');
                     } else {
                       await auth.completeUserProfile(
                         name:     _nameCtrl.text.trim(),
                         whatsapp: _phoneCtrl.text.trim(),
                       );
                       if (mounted && auth.error == null) {
-                        context.go('/user/home');
+                        router.go('/user/home');
                       }
                     }
                   },

@@ -50,8 +50,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -76,11 +78,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       await ApiService.instance.uploadUserPhoto(file.path);
       if (mounted) await context.read<AuthController>().refreshUser();
-      if (mounted) ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Photo mise a jour')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Photo mise a jour')));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Erreur photo : $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Erreur photo : $e')));
+      }
     } finally {
       if (mounted) setState(() => _photoLoading = false);
     }

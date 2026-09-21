@@ -317,31 +317,37 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
         StackTrace.current,
         fatal: false,
       );
-      if (mounted) setState(() {
-        _loading     = false;
-        _noPosition  = true;
-      });
+      if (mounted) {
+        setState(() {
+          _loading     = false;
+          _noPosition  = true;
+        });
+      }
       return;
     }
-    if (mounted) setState(() {
-      _loading    = true;
-      _noPosition = false;
-    });
+    if (mounted) {
+      setState(() {
+        _loading    = true;
+        _noPosition = false;
+      });
+    }
     try {
       final data = await ApiService.instance.getNearbyProviders(
         latitude:      pos.latitude,
         longitude:     pos.longitude,
         serviceTypeId: serviceId,
       ).timeout(const Duration(seconds: 30));
-      if (mounted) setState(() {
-        _providers = data
-            .map((e) => ProviderModel.fromJson(e as Map<String, dynamic>))
-            .toList();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _providers = data
+              .map((e) => ProviderModel.fromJson(e as Map<String, dynamic>))
+              .toList();
+          _loading = false;
+        });
+      }
     } catch (e) {
       FirebaseCrashlytics.instance.log('[_SelectProviderStep] getNearbyProviders erreur: $e');
-      if (mounted) setState(() => _loading = false);
+      if (mounted) { setState(() => _loading = false); }
     }
   }
 
@@ -705,15 +711,26 @@ class _PaymentMethods extends StatelessWidget {
     ];
     return Column(
       children: methods
-          .map<Widget>((m) => RadioListTile<String>(
-                value: m.$1,
-                groupValue: selected,
-                title: Text(m.$2),
-                activeColor: AppColors.primary,
-                onChanged: (v) => onSelect(v!),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ))
+          .map<Widget>((m) {
+            final isSelected = m.$1 == selected;
+            return ListTile(
+              leading: Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? AppColors.primary : AppColors.border,
+                    width: isSelected ? 6 : 2,
+                  ),
+                ),
+              ),
+              title: Text(m.$2),
+              onTap: () => onSelect(m.$1),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            );
+          })
           .toList(),
     );
   }

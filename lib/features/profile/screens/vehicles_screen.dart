@@ -24,6 +24,10 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   }
 
   Future<void> _load() async {
+    // Capture avant tout await pour éviter use_build_context_synchronously
+    final fallbackVehicles =
+        context.read<AuthController>().user?.vehicles ?? [];
+
     setState(() {
       _loading = true;
       _error = null;
@@ -42,7 +46,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
           .toList();
     } catch (e) {
       // Repli sur les véhicules éventuellement embarqués dans le profil
-      final embedded = (context.read<AuthController>().user?.vehicles ?? [])
+      final embedded = fallbackVehicles
           .map((v) {
             try {
               return VehicleModel.fromJson(v as Map<String, dynamic>);
@@ -60,13 +64,13 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   }
 
   Future<void> _delete(String id) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await ApiService.instance.deleteVehicle(id);
       await _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+        messenger.showSnackBar(SnackBar(content: Text('Erreur : $e')));
       }
     }
   }

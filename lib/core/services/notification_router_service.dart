@@ -11,7 +11,7 @@ import 'package:go_router/go_router.dart';
 ///     du payload sont transmises via `extra` pour éviter de les faire
 ///     transiter par l'URL (trop volumineuses pour des query params).
 ///
-/// Utilise un GlobalKey<NavigatorState> pour accéder au BuildContext
+/// Utilise un `GlobalKey<NavigatorState>` pour accéder au BuildContext
 /// courant indépendamment du widget actif au moment où la notification
 /// est tapée (cold start, background, ou foreground).
 class NotificationRouterService {

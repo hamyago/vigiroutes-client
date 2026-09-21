@@ -323,11 +323,11 @@ class _PhotoAvatarState extends State<_PhotoAvatar> {
     // Lit directement depuis le controller pour se mettre à jour après refreshUser()
     final auth     = context.watch<AuthController>();
     final photoUrl = widget.isProvider
-        ? null /* provider */?.photoUrl
+        ? null
         : auth.user?.photoUrl;
     final name   = widget.isProvider
-        ? (null /* provider */?.name ?? widget.name)
-        : (auth.user?.name   ?? widget.name);
+        ? widget.name
+        : (auth.user?.name ?? widget.name);
     final letter = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
     // Cache-busting : timestamp changé à chaque rebuild post-upload

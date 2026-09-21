@@ -246,43 +246,61 @@ class _UserHomeScreenState extends State<UserHomeScreen> with RouteAware {
             ),
           ),
 
-          // ── Service type chips ────────────────────────────────────────────
+          // ── Service dropdown + CT button ──────────────────────────────────
           Positioned(
             top: 100,
             left: 0,
             right: 0,
             child: SafeArea(
-              child: SizedBox(
-                height: 44,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  // +2 : le chip "Tous" en premier, "Pièces auto" en dernier
-                  // (AJOUTÉ — navigue vers la recherche de pièces au lieu de
-                  // filtrer les prestataires, contrairement aux autres chips).
-                  itemCount: ctrl.serviceTypes.length + 2,
-                  itemBuilder: (_, i) {
-                    if (i == 0) {
-                      return _FilterChip(
-                        label: 'Tous',
-                        selected: ctrl.selectedServiceFilter == null,
-                        onTap: () => ctrl.setServiceFilter(null),
-                      );
-                    }
-                    if (i == ctrl.serviceTypes.length + 1) {
-                      return _FilterChip(
-                        label: '🔩 Pièces auto',
-                        selected: false,
-                        onTap: () => context.push('/user/parts'),
-                      );
-                    }
-                    final s = ctrl.serviceTypes[i - 1];
-                    return _FilterChip(
-                      label: '${s.icon} ${s.name}',
-                      selected: ctrl.selectedServiceFilter == s.id,
-                      onTap: () => ctrl.setServiceFilter(s.id),
-                    );
-                  },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    // Dropdown services dépannage
+                    Expanded(
+                      child: _ServiceDropdown(
+                        serviceTypes: ctrl.serviceTypes,
+                        selectedId: ctrl.selectedServiceFilter,
+                        onChanged: (id) => ctrl.setServiceFilter(id),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Bouton Visite Technique
+                    GestureDetector(
+                      onTap: () => context.push('/ct/booking'),
+                      child: Container(
+                        height: 44,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1565C0),
+                          borderRadius: BorderRadius.circular(22),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF1565C0).withValues(alpha: 0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.verified_user, color: Colors.white, size: 18),
+                            SizedBox(width: 6),
+                            Text(
+                              'Visite Technique',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                height: 1.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -392,46 +410,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with RouteAware {
   }
 }
 
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _FilterChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.only(right: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.primary : Colors.white,
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 6,
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: selected ? Colors.white : AppColors.textPrimary,
-                fontWeight: FontWeight.w500,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ),
-      );
-}
 
 class _MapError extends StatelessWidget {
   final String message;
@@ -544,4 +522,71 @@ class _ProviderTile extends StatelessWidget {
           ]),
         ),
       );
+}
+// ── Dropdown services ─────────────────────────────────────────────────────────
+class _ServiceDropdown extends StatelessWidget {
+  final List<dynamic> serviceTypes;
+  final String? selectedId;
+  final ValueChanged<String?> onChanged;
+
+  const _ServiceDropdown({
+    required this.serviceTypes,
+    required this.selectedId,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          value: selectedId,
+          isExpanded: true,
+          icon: const Icon(Icons.keyboard_arrow_down, size: 20, color: AppColors.textMuted),
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+          hint: const Text(
+            '🔧 Tous les services',
+            style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+          ),
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('🔧 Tous les services'),
+            ),
+            ...serviceTypes.map((s) => DropdownMenuItem<String?>(
+              value: s.id as String,
+              child: Text('${s.icon} ${s.name}'),
+            )),
+            const DropdownMenuItem<String?>(
+              value: '__parts__',
+              child: Text('🔩 Pièces auto'),
+            ),
+          ],
+          onChanged: (val) {
+            if (val == '__parts__') {
+              GoRouter.of(context).push('/user/parts');
+            } else {
+              onChanged(val);
+            }
+          },
+        ),
+      ),
+    );
+  }
 }

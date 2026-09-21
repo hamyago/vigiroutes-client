@@ -84,7 +84,7 @@ class _ChoiceCard extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.22),
+                  color: Colors.white.withValues(alpha: 0.22),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: Colors.white, size: 30),
@@ -102,7 +102,7 @@ class _ChoiceCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(subtitle,
                         style: TextStyle(
-                            color: Colors.white.withOpacity(0.92),
+                            color: Colors.white.withValues(alpha: 0.92),
                             fontSize: 13,
                             height: 1.3)),
                   ],

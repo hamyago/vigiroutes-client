@@ -84,7 +84,7 @@ class RequestController extends ChangeNotifier {
       // carte/liste d'accueil) ; il reste à choisir le SERVICE souhaité —
       // voir selectService() qui saute alors directement à la confirmation
       // au lieu de redemander de choisir un prestataire.
-      if (preselectedProvider != null) _selectedProvider = preselectedProvider;
+      if (preselectedProvider != null) { _selectedProvider = preselectedProvider; }
 
       notifyListeners();
     } catch (e) {
@@ -151,7 +151,7 @@ class RequestController extends ChangeNotifier {
   Future<void> _loadEstimate() async {
     if (_selectedService == null ||
         _selectedProvider == null ||
-        _userPosition == null) return;
+        _userPosition == null) { return; }
     _estimateLoading = true;
     _error           = null;
     notifyListeners();
