@@ -87,6 +87,15 @@ class CtService {
         .toList();
   }
 
+  Future<CtBookingModel> getBooking(String bookingId) async {
+    final res = await _api.get('/ct/bookings/$bookingId');
+    return CtBookingModel.fromJson(res.data['data']);
+  }
+
+  Future<void> cancelBooking(String bookingId) async {
+    await _api.post('/ct/bookings/$bookingId/cancel');
+  }
+
   // ── QR Code ────────────────────────────────────────────────────────────────
 
   /// URL de l'image QR code pour un booking confirmé (bearer auth via header).
