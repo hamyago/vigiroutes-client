@@ -197,7 +197,7 @@ class _ProviderRow extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: (_medalColors[rank] ?? AppColors.surfaceVariant)
-                    .withOpacity(rank <= 3 ? 1 : 0.5),
+                    .withValues(alpha: rank <= 3 ? 1.0 : 0.5),
               ),
               child: Center(
                 child: Text(

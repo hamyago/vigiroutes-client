@@ -31,6 +31,8 @@ import '../../features/home/screens/city_welcome_screen.dart';
 import '../../features/legal/screens/privacy_policy_screen.dart';
 import '../../features/legal/screens/faq_screen.dart';
 import '../../features/ct/screens/ct_booking_flow_screen.dart';
+import '../../features/ct/screens/ct_booking_detail_screen.dart';
+import '../../features/ct/screens/ct_bookings_screen.dart';
 import '../../features/ct/controllers/ct_booking_controller.dart';
 
 class UserShell extends StatefulWidget {
@@ -257,10 +259,23 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
             builder: (_, __) => const FaqScreen()),
         GoRoute(
             path: '/ct/booking',
-            builder: (_, __) => ChangeNotifierProvider(
-                  create: (_) => CtBookingController(),
-                  child: const CtBookingFlowScreen(),
-                )),
+            builder: (ctx, s) {
+              final q = s.uri.queryParameters;
+              // Si une notification apporte un booking_id → détail direct
+              if (q.containsKey('booking_id')) {
+                return CtBookingDetailScreen(bookingId: q['booking_id']!);
+              }
+              // Si une notification apporte un vehicle_id → flow de réservation
+              // avec le véhicule pré-sélectionné (géré dans le flow).
+              // Sinon, flow vierge normal.
+              return ChangeNotifierProvider(
+                create: (_) => CtBookingController(),
+                child: const CtBookingFlowScreen(),
+              );
+            }),
+        GoRoute(
+            path: '/ct/bookings',
+            builder: (_, __) => const CtBookingsScreen()),
       ],
     );
 

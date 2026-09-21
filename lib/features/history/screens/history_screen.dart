@@ -5,7 +5,6 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
-import '../../auth/controllers/auth_controller.dart';
 import '../../../core/utils/price_calculator.dart';
 
 class HistoryScreen extends StatelessWidget {

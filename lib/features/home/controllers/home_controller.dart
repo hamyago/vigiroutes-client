@@ -160,7 +160,7 @@ class HomeController extends ChangeNotifier {
         position:  _userPosition!,
         icon:      icon,
         infoWindow: const InfoWindow(title: '📍 Votre position'),
-        zIndex:    2,
+        zIndexInt:  2,
       ));
     }
 

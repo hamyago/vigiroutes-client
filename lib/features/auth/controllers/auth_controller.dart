@@ -1,6 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/realtime_service.dart';

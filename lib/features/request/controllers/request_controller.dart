@@ -84,7 +84,7 @@ class RequestController extends ChangeNotifier {
       // carte/liste d'accueil) ; il reste à choisir le SERVICE souhaité —
       // voir selectService() qui saute alors directement à la confirmation
       // au lieu de redemander de choisir un prestataire.
-      if (preselectedProvider != null) _selectedProvider = preselectedProvider;
+      if (preselectedProvider != null) { _selectedProvider = preselectedProvider; }
 
       notifyListeners();
     } catch (e) {

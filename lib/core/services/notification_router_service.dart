@@ -4,16 +4,16 @@ import 'package:go_router/go_router.dart';
 
 /// Centralise la réaction aux notifications push reçues côté Client.
 ///
-/// Actuellement géré :
-///   - type = "city_welcome" → ouvre l'écran de bienvenue avec le top 5
-///     des prestataires par secteur de la ville détectée, via la route
-///     GoRouter '/user/city-welcome' (voir app_router.dart). Les données
-///     du payload sont transmises via `extra` pour éviter de les faire
-///     transiter par l'URL (trop volumineuses pour des query params).
-///
-/// Utilise un GlobalKey<NavigatorState> pour accéder au BuildContext
-/// courant indépendamment du widget actif au moment où la notification
-/// est tapée (cold start, background, ou foreground).
+/// Types FCM gérés :
+///   - intervention_update  → snackbar foreground + navigation vers /user/tracking/:id au tap
+///   - no_provider          → snackbar "Aucun prestataire disponible" (foreground) + /user/tracking/:id au tap
+///   - emergency            → snackbar foreground + navigation vers /user/emergency au tap
+///   - city_welcome         → /user/city-welcome (extra: payload)
+///   - vt_reminder_30d/15d/7d/vt_expired → /ct/booking?vehicle_id=...
+///   - booking_confirmed    → /ct/booking?booking_id=...&action=open_booking_qr
+///   - vehicle_at_center    → /ct/booking?booking_id=...
+///   - vt_result            → /ct/booking?booking_id=...&result=...
+///   - transport_update     → /ct/booking?booking_id=...&provider_status=...
 class NotificationRouterService {
   NotificationRouterService._();
   static final NotificationRouterService instance = NotificationRouterService._();
@@ -23,49 +23,165 @@ class NotificationRouterService {
   /// À appeler une seule fois dans main(), après l'initialisation de Firebase.
   void init() {
     // Notification tapée alors que l'app était en arrière-plan
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotification);
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
 
-    // Vérifie si l'app a été lancée DEPUIS une notification (cold start)
+    // App lancée DEPUIS une notification (cold start)
     FirebaseMessaging.instance.getInitialMessage().then((message) {
-      if (message != null) _handleNotification(message);
+      if (message != null) _handleTap(message);
     });
 
-    // AJOUTÉ : rien n'écoutait les notifications reçues pendant que l'app
-    // est déjà ouverte au premier plan (Android n'affiche PAS la
-    // notification système dans ce cas — c'est à l'app de le faire).
-    // Le backend envoie pourtant bien "✅ Demande acceptée !" dès que le
-    // prestataire accepte (voir InterventionController::accept() côté
-    // API), mais rien ne le montrait si le client avait l'app ouverte à
-    // ce moment précis — même bug déjà identifié et corrigé côté app Pro.
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    // Notification reçue pendant que l'app est au premier plan (Android ne
+    // l'affiche pas automatiquement — on affiche un snackbar).
+    FirebaseMessaging.onMessage.listen(_handleForeground);
   }
 
-  void _handleForegroundMessage(RemoteMessage message) {
-    final type = message.data['type'];
-    if (type != 'intervention_update') return;
+  // ─── Foreground ────────────────────────────────────────────────────────────
 
+  void _handleForeground(RemoteMessage message) {
+    final type = message.data['type'] as String?;
     final notification = message.notification;
-    if (notification == null) return;
 
+    switch (type) {
+      case 'intervention_update':
+      case 'no_provider':
+        _showSnackbar(
+          notification != null
+              ? '${notification.title ?? ''} ${notification.body ?? ''}'.trim()
+              : _labelForType(type!),
+          action: type == 'no_provider' ? null : _interventionAction(message.data),
+        );
+
+      case 'emergency':
+        _showSnackbar(
+          notification != null
+              ? '${notification.title ?? ''} ${notification.body ?? ''}'.trim()
+              : '🚨 Urgence activée',
+          action: SnackBarAction(
+            label: 'Voir',
+            onPressed: () => _navigate('/user/emergency'),
+          ),
+        );
+
+      // CT types : snackbar simple + action vers /ct/booking
+      case 'vt_reminder_30d':
+      case 'vt_reminder_15d':
+      case 'vt_reminder_7d':
+      case 'vt_expired':
+      case 'booking_confirmed':
+      case 'vehicle_at_center':
+      case 'vt_result':
+      case 'transport_update':
+        _showSnackbar(
+          notification != null
+              ? '${notification.title ?? ''} ${notification.body ?? ''}'.trim()
+              : _labelForType(type!),
+          action: SnackBarAction(
+            label: 'Voir',
+            onPressed: () => _navigateToCT(message.data),
+          ),
+        );
+
+      // city_welcome ne se montre pas en foreground (pas de snackbar)
+      default:
+        break;
+    }
+  }
+
+  // ─── Tap (background / cold start) ─────────────────────────────────────────
+
+  void _handleTap(RemoteMessage message) {
+    final type = message.data['type'] as String?;
+
+    switch (type) {
+      case 'city_welcome':
+        _navigate('/user/city-welcome', extra: message.data);
+
+      case 'intervention_update':
+      case 'no_provider':
+        final id = message.data['intervention_id'] as String?;
+        if (id != null) _navigate('/user/tracking/$id');
+
+      case 'emergency':
+        _navigate('/user/emergency');
+
+      case 'vt_reminder_30d':
+      case 'vt_reminder_15d':
+      case 'vt_reminder_7d':
+      case 'vt_expired':
+      case 'booking_confirmed':
+      case 'vehicle_at_center':
+      case 'vt_result':
+      case 'transport_update':
+        _navigateToCT(message.data);
+
+      default:
+        break;
+    }
+  }
+
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
+  void _navigateToCT(Map<String, dynamic> data) {
+    final type = data['type'] as String?;
+    final bookingId = data['booking_id'] as String?;
+    final vehicleId = data['vehicle_id'] as String?;
+    final result = data['result'] as String?;
+    final providerStatus = data['provider_status'] as String?;
+    final action = data['action'] as String?;
+
+    final params = <String, String>{};
+    if (bookingId != null) params['booking_id'] = bookingId;
+    if (vehicleId != null) params['vehicle_id'] = vehicleId;
+    if (result != null) params['result'] = result;
+    if (providerStatus != null) params['provider_status'] = providerStatus;
+    if (action != null) params['action'] = action;
+
+    final query = params.entries
+        .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+        .join('&');
+
+    final route = query.isNotEmpty ? '/ct/booking?$query' : '/ct/booking';
+    _navigate(route);
+  }
+
+  SnackBarAction? _interventionAction(Map<String, dynamic> data) {
+    final id = data['intervention_id'] as String?;
+    if (id == null) return null;
+    return SnackBarAction(
+      label: 'Suivre',
+      onPressed: () => _navigate('/user/tracking/$id'),
+    );
+  }
+
+  void _showSnackbar(String text, {SnackBarAction? action}) {
     final context = navigatorKey.currentContext;
     if (context == null) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${notification.title ?? ''} ${notification.body ?? ''}'.trim()),
+        content: Text(text),
         duration: const Duration(seconds: 5),
         behavior: SnackBarBehavior.floating,
+        action: action,
       ),
     );
   }
 
-  void _handleNotification(RemoteMessage message) {
-    final type = message.data['type'];
-    if (type != 'city_welcome') return;
-
+  void _navigate(String route, {Object? extra}) {
     final context = navigatorKey.currentContext;
     if (context == null) return;
-
-    context.push('/user/city-welcome', extra: message.data);
+    context.push(route, extra: extra);
   }
+
+  String _labelForType(String type) => switch (type) {
+        'no_provider'       => 'Aucun prestataire disponible pour le moment.',
+        'vt_reminder_30d'   => '📅 Rappel : contrôle technique dans 30 jours.',
+        'vt_reminder_15d'   => '📅 Rappel : contrôle technique dans 15 jours.',
+        'vt_reminder_7d'    => '⚠️ Rappel : contrôle technique dans 7 jours.',
+        'vt_expired'        => '🚫 Contrôle technique expiré.',
+        'booking_confirmed' => '✅ Réservation CT confirmée.',
+        'vehicle_at_center' => '🏁 Votre véhicule est au centre CT.',
+        'vt_result'         => '📋 Résultat du contrôle technique disponible.',
+        'transport_update'  => '🚗 Mise à jour du transport CT.',
+        _                   => 'Nouvelle notification.',
+      };
 }

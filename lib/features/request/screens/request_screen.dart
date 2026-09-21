@@ -317,31 +317,37 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
         StackTrace.current,
         fatal: false,
       );
-      if (mounted) setState(() {
-        _loading     = false;
-        _noPosition  = true;
-      });
+      if (mounted) {
+        setState(() {
+          _loading     = false;
+          _noPosition  = true;
+        });
+      }
       return;
     }
-    if (mounted) setState(() {
-      _loading    = true;
-      _noPosition = false;
-    });
+    if (mounted) {
+      setState(() {
+        _loading    = true;
+        _noPosition = false;
+      });
+    }
     try {
       final data = await ApiService.instance.getNearbyProviders(
         latitude:      pos.latitude,
         longitude:     pos.longitude,
         serviceTypeId: serviceId,
       ).timeout(const Duration(seconds: 30));
-      if (mounted) setState(() {
-        _providers = data
-            .map((e) => ProviderModel.fromJson(e as Map<String, dynamic>))
-            .toList();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _providers = data
+              .map((e) => ProviderModel.fromJson(e as Map<String, dynamic>))
+              .toList();
+          _loading = false;
+        });
+      }
     } catch (e) {
       FirebaseCrashlytics.instance.log('[_SelectProviderStep] getNearbyProviders erreur: $e');
-      if (mounted) setState(() => _loading = false);
+      if (mounted) { setState(() => _loading = false); }
     }
   }
 
@@ -705,12 +711,15 @@ class _PaymentMethods extends StatelessWidget {
     ];
     return Column(
       children: methods
-          .map<Widget>((m) => RadioListTile<String>(
-                value: m.$1,
-                groupValue: selected,
+          .map<Widget>((m) => ListTile(
+                leading: Radio<String>(
+                  value: m.$1,
+                  groupValue: selected,
+                  activeColor: AppColors.primary,
+                  onChanged: (v) { if (v != null) onSelect(v); },
+                ),
                 title: Text(m.$2),
-                activeColor: AppColors.primary,
-                onChanged: (v) => onSelect(v!),
+                onTap: () => onSelect(m.$1),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
               ))

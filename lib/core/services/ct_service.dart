@@ -1,133 +1,95 @@
-// ignore_for_file: always_specify_types
-import '../models/vehicle_model.dart';
 import 'api_service.dart';
+import '../models/vehicle_model.dart';
 
 class CtService {
-  static final CtService instance = CtService._();
   CtService._();
+  static final CtService instance = CtService._();
 
-  // ── Vehicles ──────────────────────────────────────────────────────────────
+  final _api = ApiService.instance;
 
-  Future<List<VehicleModel>> getMyVehicles() async {
-    final res = await ApiService.instance.get('/v1/vehicles');
-    final d = res.data;
-    final List raw = (d is Map ? (d['data'] ?? d['vehicles']) : d) as List? ?? [];
-    return raw.map((e) => VehicleModel.fromJson(e as Map<String, dynamic>)).toList();
+  static const _base = 'https://api.vigiroutes.com/api';
+
+  // ── Véhicules ──────────────────────────────────────────────────────────────
+
+  Future<List<VehicleModel>> getVehicles() async {
+    final res = await _api.get('/ct/vehicles');
+    return (res.data['data'] as List)
+        .map((e) => VehicleModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
-  Future<List<VehicleModel>> getVehicles() => getMyVehicles();
+  Future<VehicleModel> createVehicle(Map<String, dynamic> data) async {
+    final res = await _api.post('/ct/vehicles', data: data);
+    return VehicleModel.fromJson(res.data['data']);
+  }
 
-  // ── Centers ───────────────────────────────────────────────────────────────
+  Future<VehicleModel> updateVehicle(String id, Map<String, dynamic> data) async {
+    final res = await _api.patch('/ct/vehicles/$id', data: data);
+    return VehicleModel.fromJson(res.data['data']);
+  }
+
+  Future<void> deleteVehicle(String id) async {
+    await _api.delete('/ct/vehicles/$id');
+  }
+
+  // ── Centres techniques ─────────────────────────────────────────────────────
 
   Future<List<TechnicalCenterModel>> getCenters({
     String? date,
     double? lat,
     double? lng,
-    String vehicleCategory = 'VP',
   }) async {
-    final res = await ApiService.instance.get('/v1/ct/centers', params: {
-      'vehicle_category': vehicleCategory,
+    final res = await _api.get('/ct/centers', params: {
       if (date != null) 'date': date,
       if (lat != null) 'lat': lat,
       if (lng != null) 'lng': lng,
     });
-    final d = res.data;
-    final List raw = (d is Map ? (d['data'] ?? d['centers']) : d) as List? ?? [];
-    return raw.map((e) => TechnicalCenterModel.fromJson(e as Map<String, dynamic>)).toList();
+    return (res.data['data'] as List)
+        .map((e) => TechnicalCenterModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
-  // ── Slots ─────────────────────────────────────────────────────────────────
-
-  Future<List<SessionSlotModel>> getAvailableSlots(String centerId, String date) async {
-    final res = await ApiService.instance.get(
-      '/v1/ct/centers/$centerId/slots',
+  Future<List<SessionSlotModel>> getAvailableSlots(
+      String centerId, String date) async {
+    final res = await _api.get(
+      '/ct/centers/$centerId/slots',
       params: {'date': date},
     );
-    final d = res.data;
-    final List raw = (d is Map ? (d['data'] ?? d['slots']) : d) as List? ?? [];
-    return raw.map((e) => SessionSlotModel.fromJson(e as Map<String, dynamic>)).toList();
+    return (res.data['data'] as List)
+        .map((e) => SessionSlotModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
-  // ── Bookings ──────────────────────────────────────────────────────────────
+  // ── Réservations ───────────────────────────────────────────────────────────
 
   Future<CtBookingModel> initiateBooking({
     required String vehicleId,
     required String sessionId,
-    required String slotTime,
-    required String vehicleCategory,
-    required String transportMode,
-    bool keyHandoverAccepted = false,
-    String? pickupAddress,
-    double? pickupLat,
-    double? pickupLng,
+    String? transportOption,
   }) async {
-    final res = await ApiService.instance.post('/v1/ct/bookings/initiate', data: {
+    final res = await _api.post('/ct/bookings', data: {
       'vehicle_id': vehicleId,
       'session_id': sessionId,
-      'slot_time': slotTime,
-      'vehicle_category': vehicleCategory,
-      'transport_mode': transportMode,
-      'key_handover_accepted': keyHandoverAccepted,
-      if (pickupAddress != null) 'pickup_address': pickupAddress,
-      if (pickupLat != null) 'pickup_lat': pickupLat,
-      if (pickupLng != null) 'pickup_lng': pickupLng,
+      if (transportOption != null) 'transport_option': transportOption,
     });
-    final d = res.data;
-    final map = (d is Map && d['data'] is Map) ? d['data'] : d;
-    return CtBookingModel.fromJson(map as Map<String, dynamic>);
+    return CtBookingModel.fromJson(res.data['data']);
+  }
+
+  Future<Map<String, dynamic>> initiatePayment(String bookingId) async {
+    final res = await _api.post('/ct/bookings/$bookingId/pay');
+    return Map<String, dynamic>.from(res.data as Map);
   }
 
   Future<List<CtBookingModel>> getMyBookings() async {
-    final res = await ApiService.instance.get('/v1/ct/bookings');
-    final d = res.data;
-    final List raw = (d is Map ? (d['data'] ?? d['bookings'] ?? d['data']) : d) as List? ?? [];
-    return raw.map((e) => CtBookingModel.fromJson(e as Map<String, dynamic>)).toList();
+    final res = await _api.get('/ct/bookings');
+    return (res.data['data'] as List)
+        .map((e) => CtBookingModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
-  Future<CtBookingModel> getBooking(String id) async {
-    final res = await ApiService.instance.get('/v1/ct/bookings/$id');
-    final d = res.data;
-    final map = (d is Map && d['data'] is Map) ? d['data'] : d;
-    return CtBookingModel.fromJson(map as Map<String, dynamic>);
-  }
+  // ── QR Code ────────────────────────────────────────────────────────────────
 
-  Future<void> cancelBooking(String id) async {
-    await ApiService.instance.delete('/v1/ct/bookings/$id');
-  }
-
-  // ── Payment ───────────────────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> initiatePayment(
-    String bookingId, {
-    required String paymentMethod,
-    String? phone,
-  }) async {
-    final res = await ApiService.instance.post(
-      '/v1/ct/bookings/$bookingId/pay',
-      data: {
-        'payment_method': paymentMethod,
-        if (phone != null) 'phone': phone,
-      },
-    );
-    final d = res.data;
-    return ((d is Map && d['data'] is Map) ? d['data'] : d) as Map<String, dynamic>? ?? {};
-  }
-
+  /// URL de l'image QR code pour un booking confirmé (bearer auth via header).
   String qrCodeUrl(String bookingId) =>
-      'https://api.vigiroutes.com/api/v1/ct/bookings/$bookingId/qr';
-
-  // ── Carnet numérique ───────────────────────────────────────────────────────
-
-  Future<List<VehicleInterventionModel>> getVehicleHistory(String vehicleId) async {
-    final res = await ApiService.instance.get('/v1/vehicles/$vehicleId/history');
-    final d = res.data;
-    final List raw = (d is Map ? (d['data'] ?? d['history']) : d) as List? ?? [];
-    return raw.map((e) => VehicleInterventionModel.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  Future<Map<String, dynamic>> getSpendingSummary(String vehicleId) async {
-    final res = await ApiService.instance.get('/v1/vehicles/$vehicleId/spending');
-    final d = res.data;
-    return ((d is Map && d['data'] is Map) ? d['data'] : d) as Map<String, dynamic>? ?? {};
-  }
+      '$_base/ct/bookings/$bookingId/qr';
 }
