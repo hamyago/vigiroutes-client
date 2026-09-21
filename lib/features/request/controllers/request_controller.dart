@@ -151,7 +151,7 @@ class RequestController extends ChangeNotifier {
   Future<void> _loadEstimate() async {
     if (_selectedService == null ||
         _selectedProvider == null ||
-        _userPosition == null) return;
+        _userPosition == null) { return; }
     _estimateLoading = true;
     _error           = null;
     notifyListeners();

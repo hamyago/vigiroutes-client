@@ -9,10 +9,10 @@ dependencies:
     sdk: flutter
   geolocator: ^13.0.4
   permission_handler: ^11.3.1
-  firebase_core: ^4.11.0
-  firebase_auth: ^6.5.4
-  firebase_crashlytics: ^5.2.4
-  firebase_messaging: ^16.4.1
+  firebase_core: ^3.13.0
+  firebase_auth: ^5.3.0
+  firebase_messaging: ^15.1.5
+  firebase_crashlytics: ^4.3.10
   dio: ^5.7.0
   web_socket_channel: ^3.0.1
   provider: ^6.1.2
