@@ -112,6 +112,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   onTap: () => context.go('/user/history'),
                 ),
                 _MenuItem(
+                  icon: Icons.directions_car_outlined,
+                  label: 'Mes véhicules',
+                  onTap: () => context.push('/user/vehicles'),
+                ),
+                _MenuItem(
                   icon: Icons.receipt_long_outlined,
                   label: 'Mes commandes de pièces',
                   onTap: () => context.push('/user/parts/orders'),

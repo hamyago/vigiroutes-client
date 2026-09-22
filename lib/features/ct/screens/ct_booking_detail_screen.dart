@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/vehicle_model.dart';
 import '../../../core/services/ct_service.dart';
@@ -38,21 +39,25 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'pending': return AppColors.warning;
-      case 'confirmed':
-      case 'completed': return AppColors.success;
-      case 'cancelled': return AppColors.error;
-      default: return AppColors.textSecondary;
+      case 'pending':     return AppColors.warning;
+      case 'confirmed':   return AppColors.primary;
+      case 'arrived':     return Colors.blue;
+      case 'in_progress': return Colors.amber.shade700;
+      case 'completed':   return AppColors.success;
+      case 'cancelled':   return AppColors.error;
+      default:            return AppColors.textSecondary;
     }
   }
 
   String _statusLabel(String status) {
     switch (status) {
-      case 'pending': return 'En attente';
-      case 'confirmed': return 'Confirmé';
-      case 'completed': return 'Terminé';
-      case 'cancelled': return 'Annulé';
-      default: return status;
+      case 'pending':      return 'En attente';
+      case 'confirmed':    return 'Confirmé';
+      case 'arrived':      return 'Arrivé au centre';
+      case 'in_progress':  return 'Contrôle en cours';
+      case 'completed':    return 'Terminé';
+      case 'cancelled':    return 'Annulé';
+      default:             return status;
     }
   }
 
@@ -166,6 +171,52 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
             _InfoRow(label: 'Téléphone', value: b.center.contactPhone!),
         ]),
         const SizedBox(height: 16),
+
+        // QR code (affiché dès que le paiement est validé)
+        if (b.qrToken != null) ...[
+          _Section(title: 'QR Code d\'entrée', children: [
+            const Text(
+              'Présentez ce QR code à l\'agent terrain le jour du rendez-vous.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: QrImageView(
+                  data: b.qrToken!,
+                  version: QrVersions.auto,
+                  size: 200,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: Colors.black,
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: Text(
+                b.reference,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 16),
+        ],
 
         // Résultat VT (si disponible)
         if (b.vtResult != null) ...[
