@@ -34,6 +34,10 @@ import '../../features/ct/screens/ct_booking_flow_screen.dart';
 import '../../features/ct/screens/ct_booking_detail_screen.dart';
 import '../../features/ct/screens/ct_bookings_screen.dart';
 import '../../features/ct/controllers/ct_booking_controller.dart';
+import '../../features/ct/controllers/ct_quote_controller.dart';
+import '../../features/ct/screens/ct_quote_requests_screen.dart';
+import '../../features/ct/screens/ct_quote_new_screen.dart';
+import '../../features/ct/screens/ct_quote_detail_screen.dart';
 
 class UserShell extends StatefulWidget {
   final Widget child;
@@ -276,6 +280,24 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
         GoRoute(
             path: '/ct/bookings',
             builder: (_, __) => const CtBookingsScreen()),
+        GoRoute(
+            path: '/ct/quotes',
+            builder: (_, __) => ChangeNotifierProvider(
+                  create: (_) => CtQuoteController(),
+                  child: const CtQuoteRequestsScreen(),
+                )),
+        GoRoute(
+            path: '/ct/quote/new',
+            builder: (_, __) => ChangeNotifierProvider(
+                  create: (_) => CtQuoteController(),
+                  child: const CtQuoteNewScreen(),
+                )),
+        GoRoute(
+            path: '/ct/quote/:id',
+            builder: (ctx, s) => ChangeNotifierProvider(
+                  create: (_) => CtQuoteController(),
+                  child: CtQuoteDetailScreen(requestId: s.pathParameters['id']!),
+                )),
       ],
     );
 
