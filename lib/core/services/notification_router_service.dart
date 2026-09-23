@@ -1,13 +1,14 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
 
 /// Centralise la réaction aux notifications push reçues côté Client.
 ///
 /// Types FCM gérés :
-///   - intervention_update  → snackbar foreground + navigation vers /user/tracking/:id au tap
-///   - no_provider          → snackbar "Aucun prestataire disponible" (foreground) + /user/tracking/:id au tap
-///   - emergency            → snackbar foreground + navigation vers /user/emergency au tap
+///   - intervention_update  → notification locale foreground + navigation vers /user/tracking/:id au tap
+///   - no_provider          → notification locale + snackbar "Aucun prestataire disponible"
+///   - emergency            → notification locale + navigation vers /user/emergency au tap
 ///   - city_welcome         → /user/city-welcome (extra: payload)
 ///   - vt_reminder_30d/15d/7d/vt_expired → /ct/booking?vehicle_id=...
 ///   - booking_confirmed    → /ct/booking?booking_id=...&action=open_booking_qr
@@ -20,7 +21,10 @@ class NotificationRouterService {
 
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-  /// À appeler une seule fois dans main(), après l'initialisation de Firebase.
+  final _localNotifications = FlutterLocalNotificationsPlugin();
+
+  /// À appeler une seule fois dans main(), après l'initialisation de Firebase
+  /// et de flutter_local_notifications.
   void init() {
     // Notification tapée alors que l'app était en arrière-plan
     FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
@@ -30,8 +34,9 @@ class NotificationRouterService {
       if (message != null) _handleTap(message);
     });
 
-    // Notification reçue pendant que l'app est au premier plan (Android ne
-    // l'affiche pas automatiquement — on affiche un snackbar).
+    // Notification reçue pendant que l'app est au premier plan.
+    // Android ne l'affiche PAS automatiquement : on affiche une notification
+    // locale + un snackbar pour les types les plus urgents.
     FirebaseMessaging.onMessage.listen(_handleForeground);
   }
 
@@ -39,23 +44,29 @@ class NotificationRouterService {
 
   void _handleForeground(RemoteMessage message) {
     final type = message.data['type'] as String?;
-    final notification = message.notification;
+    if (type == null) return;
 
+    final notification = message.notification;
+    final title = notification?.title ?? _titleForType(type);
+    final body  = notification?.body  ?? _bodyForData(message.data);
+
+    // Affiche une notification locale (visible même en foreground sur Android)
+    _showLocalNotification(type: type, title: title, body: body, data: message.data);
+
+    // Snackbar supplémentaire pour les types urgents nécessitant une action immédiate
     switch (type) {
       case 'intervention_update':
-      case 'no_provider':
         _showSnackbar(
-          notification != null
-              ? '${notification.title ?? ''} ${notification.body ?? ''}'.trim()
-              : _labelForType(type!),
-          action: type == 'no_provider' ? null : _interventionAction(message.data),
+          body,
+          action: _interventionAction(message.data),
         );
+
+      case 'no_provider':
+        _showSnackbar('Aucun prestataire disponible pour le moment.');
 
       case 'emergency':
         _showSnackbar(
-          notification != null
-              ? '${notification.title ?? ''} ${notification.body ?? ''}'.trim()
-              : '🚨 Urgence activée',
+          '🚨 Urgence activée',
           action: SnackBarAction(
             label: 'Voir',
             onPressed: () => _navigate('/user/emergency'),
@@ -72,16 +83,14 @@ class NotificationRouterService {
       case 'vt_result':
       case 'transport_update':
         _showSnackbar(
-          notification != null
-              ? '${notification.title ?? ''} ${notification.body ?? ''}'.trim()
-              : _labelForType(type!),
+          body,
           action: SnackBarAction(
             label: 'Voir',
             onPressed: () => _navigateToCT(message.data),
           ),
         );
 
-      // city_welcome ne se montre pas en foreground (pas de snackbar)
+      // city_welcome : pas de snackbar en foreground
       default:
         break;
     }
@@ -116,6 +125,43 @@ class NotificationRouterService {
 
       default:
         break;
+    }
+  }
+
+  // ─── Notification locale foreground ─────────────────────────────────────────
+
+  Future<void> _showLocalNotification({
+    required String type,
+    required String title,
+    required String body,
+    required Map<String, dynamic> data,
+  }) async {
+    try {
+      await _localNotifications.show(
+        type.hashCode,
+        title,
+        body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            'intervention_updates',
+            'Mises à jour interventions',
+            channelDescription: 'Notifications de suivi de vos demandes d\'assistance',
+            importance: type == 'emergency' ? Importance.max : Importance.high,
+            priority : type == 'emergency' ? Priority.max  : Priority.high,
+            fullScreenIntent: type == 'emergency',
+            playSound: true,
+            enableVibration: true,
+            ticker: title,
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+      );
+    } catch (_) {
+      // flutter_local_notifications non initialisé ou erreur → le snackbar suffit
     }
   }
 
@@ -172,16 +218,27 @@ class NotificationRouterService {
     context.push(route, extra: extra);
   }
 
-  String _labelForType(String type) => switch (type) {
-        'no_provider'       => 'Aucun prestataire disponible pour le moment.',
-        'vt_reminder_30d'   => '📅 Rappel : contrôle technique dans 30 jours.',
-        'vt_reminder_15d'   => '📅 Rappel : contrôle technique dans 15 jours.',
-        'vt_reminder_7d'    => '⚠️ Rappel : contrôle technique dans 7 jours.',
-        'vt_expired'        => '🚫 Contrôle technique expiré.',
-        'booking_confirmed' => '✅ Réservation CT confirmée.',
-        'vehicle_at_center' => '🏁 Votre véhicule est au centre CT.',
-        'vt_result'         => '📋 Résultat du contrôle technique disponible.',
-        'transport_update'  => '🚗 Mise à jour du transport CT.',
-        _                   => 'Nouvelle notification.',
+  String _titleForType(String type) => switch (type) {
+        'intervention_update' => '🚗 Mise à jour intervention',
+        'no_provider'         => '😔 Aucun prestataire disponible',
+        'emergency'           => '🚨 Urgence activée',
+        'booking_confirmed'   => '✅ Réservation CT confirmée',
+        'vehicle_at_center'   => '🏁 Véhicule au centre CT',
+        'vt_result'           => '📋 Résultat contrôle technique',
+        'transport_update'    => '🚗 Mise à jour transport CT',
+        'vt_reminder_30d'     => '📅 CT dans 30 jours',
+        'vt_reminder_15d'     => '📅 CT dans 15 jours',
+        'vt_reminder_7d'      => '⚠️ CT dans 7 jours',
+        'vt_expired'          => '🚫 CT expiré',
+        _                     => 'VigiRoutes',
       };
+
+  String _bodyForData(Map<String, dynamic> data) {
+    final type = data['type'] as String? ?? '';
+    return switch (type) {
+      'no_provider' => 'Aucun prestataire n\'est disponible pour le moment.',
+      'vt_expired'  => 'Votre contrôle technique est expiré. Prenez rendez-vous.',
+      _             => 'Appuyez pour voir les détails.',
+    };
+  }
 }
