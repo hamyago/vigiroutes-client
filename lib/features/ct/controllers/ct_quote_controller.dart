@@ -50,6 +50,7 @@ class CtQuoteController extends ChangeNotifier {
 
   Future<bool> submitRequest({
     required String vehicleId,
+    required String providerId,
     required String transportMode,
     String? notes,
   }) async {
@@ -59,6 +60,7 @@ class CtQuoteController extends ChangeNotifier {
     try {
       createdRequest = await _service.createRequest(
         vehicleId: vehicleId,
+        providerId: providerId,
         transportMode: transportMode,
         notes: notes,
       );

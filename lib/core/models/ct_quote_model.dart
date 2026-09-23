@@ -3,6 +3,7 @@
 class CtQuoteRequestModel {
   final String id;
   final String vehicleId;
+  final String? providerId;
   final String transportMode;
   final String? notes;
   final String status; // pending | quoted | accepted | refused | expired | booked
@@ -12,6 +13,7 @@ class CtQuoteRequestModel {
   const CtQuoteRequestModel({
     required this.id,
     required this.vehicleId,
+    this.providerId,
     required this.transportMode,
     this.notes,
     required this.status,
@@ -23,6 +25,7 @@ class CtQuoteRequestModel {
     return CtQuoteRequestModel(
       id: json['id'] as String,
       vehicleId: json['vehicle_id'] as String? ?? '',
+      providerId: json['provider_id'] as String?,
       transportMode: json['transport_mode'] as String? ?? 'self',
       notes: json['notes'] as String?,
       status: json['status'] as String? ?? 'pending',

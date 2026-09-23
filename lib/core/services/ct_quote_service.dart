@@ -25,11 +25,13 @@ class CtQuoteService {
   /// POST /client/ct/quote-requests
   Future<CtQuoteRequestModel> createRequest({
     required String vehicleId,
+    required String providerId,
     required String transportMode,
     String? notes,
   }) async {
     final res = await _api.post('/client/ct/quote-requests', data: {
       'vehicle_id': vehicleId,
+      'provider_id': providerId,
       'transport_mode': transportMode,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
     });
