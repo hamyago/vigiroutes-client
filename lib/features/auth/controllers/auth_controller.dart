@@ -203,7 +203,14 @@ class AuthController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('[Auth] _refreshUser error: $e');
-      _state = AuthState.unauthenticated;
+      // Erreur réseau / timeout : NE PAS déconnecter si déjà authentifié.
+      // Seul un 401 déclenche la déconnexion (géré par onUnauthorized dans le constructeur).
+      final msg = e.toString();
+      final is401 = msg.contains('401') || msg.contains('Unauthorized');
+      if (is401 || _state == AuthState.unknown) {
+        _state = AuthState.unauthenticated;
+      }
+      // Si on était authenticated et que c'est une erreur réseau, on garde l'état.
       notifyListeners();
     }
   }

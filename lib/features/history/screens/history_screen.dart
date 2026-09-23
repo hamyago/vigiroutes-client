@@ -11,37 +11,52 @@ class HistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Mes interventions')),
-      body: FutureBuilder<List<dynamic>>(
-        future: ApiService.instance.getInterventions(),
-        builder: (_, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return Center(child: Text('Erreur : ${snap.error}'));
-          }
-          final rawList = snap.data ?? [];
-          final List<InterventionModel> list = rawList
-              .map((e) {
-                try { return InterventionModel.fromJson(e as Map<String, dynamic>); }
-                catch (_) { return null; }
-              })
-              .whereType<InterventionModel>()
-              .toList();
-          if (list.isEmpty) return _Empty();
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: list.length,
-            itemBuilder: (_, i) => _InterventionTile(
-              intervention: list[i],
-              onTap: () {
-                if (list[i].isActive) context.go('/user/tracking/${list[i].id}');
-              },
-            ),
-          );
-        },
+    return PopScope(
+      // FIX : intercepte le bouton retour Android pour naviguer vers /user/home
+      // au lieu de quitter l'app ou relancer le splash.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go('/user/home');
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Mes interventions'),
+          // FIX : bouton retour explicite → accueil carte
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.go('/user/home'),
+          ),
+        ),
+        body: FutureBuilder<List<dynamic>>(
+          future: ApiService.instance.getInterventions(),
+          builder: (_, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snap.hasError) {
+              return Center(child: Text('Erreur : ${snap.error}'));
+            }
+            final rawList = snap.data ?? [];
+            final List<InterventionModel> list = rawList
+                .map((e) {
+                  try { return InterventionModel.fromJson(e as Map<String, dynamic>); }
+                  catch (_) { return null; }
+                })
+                .whereType<InterventionModel>()
+                .toList();
+            if (list.isEmpty) return _Empty();
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: list.length,
+              itemBuilder: (_, i) => _InterventionTile(
+                intervention: list[i],
+                onTap: () {
+                  if (list[i].isActive) context.go('/user/tracking/${list[i].id}');
+                },
+              ),
+            );
+          },
+        ),
       ),
     );
   }

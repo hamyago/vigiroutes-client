@@ -150,6 +150,10 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
         if (onSplash) return null;
         if (loc.startsWith('/auth')) return null;
         if (isLoading) return null;
+
+        // FIX : ne jamais rediriger un utilisateur authentifié depuis les routes /user/* ou /ct/*
+        if (isAuth && (loc.startsWith('/user') || loc.startsWith('/ct'))) return null;
+
         if (!isAuth && loc != '/onboarding') return '/onboarding';
         if (isAuth && loc == '/onboarding') {
           if (auth.isProvider) return '/provider/home';

@@ -14,7 +14,12 @@ class CtBookingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void goToStep2() => setStep(2);
+  // FIX : charge les centres en même temps que l'on passe à l'étape 2
+  void goToStep2() {
+    setStep(2);
+    loadCenters();
+  }
+
   void goToStep3() => setStep(3);
   void goToStep4() => setStep(4);
   void goBack() => setStep(_step - 1);
@@ -53,6 +58,12 @@ class CtBookingController extends ChangeNotifier {
 
   void selectCenter(TechnicalCenterModel c) {
     _selectedCenter = c;
+    // FIX : déplacer la caméra vers le centre sélectionné
+    if (c.latitude != null && c.longitude != null) {
+      _mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(c.latitude!, c.longitude!), 14),
+      );
+    }
     notifyListeners();
   }
 
@@ -165,6 +176,11 @@ class CtBookingController extends ChangeNotifier {
 
   void onMapCreated(GoogleMapController c) {
     _mapController = c;
+    // FIX : si des centres sont déjà chargés quand la carte s'initialise,
+    // zoomer immédiatement sur leur barycentre
+    if (_centers.isNotEmpty) {
+      _animateToCenters();
+    }
   }
 
   void _buildMapMarkers() {
@@ -180,6 +196,47 @@ class CtBookingController extends ChangeNotifier {
         )
         .toSet();
     notifyListeners();
+  }
+
+  /// Anime la caméra pour afficher tous les centres chargés.
+  void _animateToCenters() {
+    final withCoords = _centers
+        .where((c) => c.latitude != null && c.longitude != null)
+        .toList();
+    if (withCoords.isEmpty || _mapController == null) return;
+
+    if (withCoords.length == 1) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          LatLng(withCoords.first.latitude!, withCoords.first.longitude!),
+          13,
+        ),
+      );
+      return;
+    }
+
+    // Calculer le LatLngBounds englobant tous les centres
+    double minLat = withCoords.first.latitude!;
+    double maxLat = withCoords.first.latitude!;
+    double minLng = withCoords.first.longitude!;
+    double maxLng = withCoords.first.longitude!;
+
+    for (final c in withCoords) {
+      if (c.latitude! < minLat) minLat = c.latitude!;
+      if (c.latitude! > maxLat) maxLat = c.latitude!;
+      if (c.longitude! < minLng) minLng = c.longitude!;
+      if (c.longitude! > maxLng) maxLng = c.longitude!;
+    }
+
+    _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
+        ),
+        60, // padding in pixels
+      ),
+    );
   }
 
   // ── API calls ─────────────────────────────────────────────────────────────
@@ -208,6 +265,8 @@ class CtBookingController extends ChangeNotifier {
         lng: lng,
       );
       _buildMapMarkers();
+      // FIX : déplacer la caméra vers les centres chargés
+      _animateToCenters();
     } catch (e) {
       _error = e.toString();
     } finally {
