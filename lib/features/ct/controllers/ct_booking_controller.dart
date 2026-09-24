@@ -58,6 +58,7 @@ class CtBookingController extends ChangeNotifier {
 
   void selectCenter(TechnicalCenterModel c) {
     _selectedCenter = c;
+    _selectedSlot = null; // reset le slot quand on change de centre
     // FIX : déplacer la caméra vers le centre sélectionné
     if (c.latitude != null && c.longitude != null) {
       _mapController?.animateCamera(
@@ -65,6 +66,19 @@ class CtBookingController extends ChangeNotifier {
       );
     }
     notifyListeners();
+    // FIX BOUTON CONTINUER : charger les slots pour la date déjà sélectionnée
+    // dès qu'on choisit un centre (sans attendre un changement de date).
+    if (_selectedDate != null) {
+      final dateStr =
+          '${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}';
+      loadSlots(dateStr);
+    } else {
+      // Pas de date choisie → charger les slots pour aujourd'hui par défaut
+      final now = DateTime.now();
+      final dateStr =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      loadSlots(dateStr);
+    }
   }
 
   // ── Slots ─────────────────────────────────────────────────────────────────
