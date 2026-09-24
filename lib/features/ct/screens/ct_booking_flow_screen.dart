@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+// FIX bug 2 : url_launcher est nécessaire pour ouvrir la page de paiement
+// dans le navigateur. Ajouter dans pubspec.yaml :
+//   url_launcher: ^6.3.1
+import 'package:url_launcher/url_launcher.dart';
 import '../controllers/ct_booking_controller.dart';
 import '../../../core/constants/app_colors.dart';
 
@@ -715,10 +719,33 @@ class _Step4Summary extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 5 — Payment
+// FIX bug 2 : le bouton "Ouvrir la page de paiement" avait un onPressed vide.
+// On utilise url_launcher pour ouvrir paymentUrl dans le navigateur externe.
 // ─────────────────────────────────────────────────────────────────────────────
 class _Step5Payment extends StatelessWidget {
   final CtBookingController ctrl;
   const _Step5Payment({required this.ctrl});
+
+  Future<void> _openPaymentUrl(BuildContext context, String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lien de paiement invalide.')),
+      );
+      return;
+    }
+    final canOpen = await canLaunchUrl(uri);
+    if (canOpen) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Impossible d\'ouvrir la page de paiement.')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -750,9 +777,9 @@ class _Step5Payment extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: () {
-                  // Open paymentUrl in browser
-                },
+                // FIX bug 2 : onPressed était vide. On ouvre maintenant
+                // paymentUrl dans le navigateur système via url_launcher.
+                onPressed: () => _openPaymentUrl(context, ctrl.paymentUrl!),
                 icon: const Icon(Icons.open_in_browser),
                 label: const Text('Ouvrir la page de paiement'),
                 style: ElevatedButton.styleFrom(

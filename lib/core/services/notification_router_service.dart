@@ -14,6 +14,13 @@
 //   - vt_reminder_3d       → /ct/vehicles?vehicle_id=...  (+ snackbar critical)
 //   - vt_reminder_1d       → /ct/vehicles?vehicle_id=...  (+ snackbar critical)
 //   - vt_expired           → /ct/vehicles?vehicle_id=...
+//
+// Note : la déduplication de city_welcome n'est plus nécessaire ici.
+// Le fix est architectural : HomeController ne déclenche plus la détection
+// de ville à chaque tick de 30 s (voir home_controller.dart + api_service.dart
+// + ProvidersController.php). Le backend envoie donc la notification une seule
+// fois — au premier chargement ou quand l'utilisateur entre dans une nouvelle
+// ville après s'être déplacé de plus de 5 km.
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -51,6 +58,12 @@ class NotificationRouterService {
     _showLocalNotification(type: type, title: title, body: body, data: message.data);
 
     switch (type) {
+      case 'city_welcome':
+        _showSnackbar(body,
+            action: SnackBarAction(
+                label: 'Voir',
+                onPressed: () => _navigate('/user/city-welcome', extra: message.data)));
+
       case 'intervention_update':
         _showSnackbar(body, action: _interventionAction(message.data));
 
@@ -257,6 +270,7 @@ class NotificationRouterService {
         'intervention_update' => '🚗 Mise à jour intervention',
         'no_provider'         => '😔 Aucun prestataire disponible',
         'emergency'           => '🚨 Urgence activée',
+        'city_welcome'        => '👋 Bienvenue sur VigiRoutes',
         'booking_confirmed'   => '✅ Réservation CT confirmée',
         'vehicle_at_center'   => '🏁 Véhicule au centre CT',
         'vt_result'           => '📋 Résultat contrôle technique',

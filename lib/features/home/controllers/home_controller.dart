@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show asin, cos, pi, sin, sqrt;
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +43,13 @@ class HomeController extends ChangeNotifier {
   bool                _isLoading    = true;
   String?             _error;
   Timer?              _refreshTimer;
+
+  // FIX bug 1 : mémoriser la dernière position envoyée à checkAndNotify
+  // pour éviter de déclencher la détection de ville à chaque polling.
+  // On ne notifie le backend que si l'utilisateur s'est déplacé de plus
+  // de _cityCheckThresholdKm depuis le dernier envoi.
+  LatLng?  _lastCityCheckPosition;
+  static const double _cityCheckThresholdKm = 5.0;
 
   LatLng?                get userPosition        => _userPosition;
   bool                   get locationApprox      => _locationApprox;
@@ -93,9 +101,17 @@ class HomeController extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
 
-      await _loadProviders();
+      // FIX bug 1 : premier chargement — toujours envoyer la position
+      // au backend pour la détection de ville (premier appel au démarrage).
+      await _loadProviders(checkCity: true);
+
+      // FIX bug 1 : le timer de 30 s rafraîchit UNIQUEMENT les prestataires
+      // sur la carte (marqueurs, disponibilité). Il ne déclenche PAS la
+      // détection de ville à chaque tick — checkCity vaut false ici.
+      // La détection de ville se fait seulement si l'utilisateur s'est
+      // déplacé de plus de _cityCheckThresholdKm (voir _shouldCheckCity).
       _refreshTimer ??=
-          Timer.periodic(const Duration(seconds: 30), (_) => _loadProviders());
+          Timer.periodic(const Duration(seconds: 30), (_) => _loadProviders(checkCity: false));
     } catch (e) {
       // Filet de sécurité : ne doit jamais laisser l'écran figé sur un
       // spinner indéfiniment sans retour possible.
@@ -115,7 +131,9 @@ class HomeController extends ChangeNotifier {
       _userPosition   = LatLng(pos.latitude, pos.longitude);
       _locationApprox = false;
       notifyListeners();
-      await _loadProviders();
+      // FIX bug 1 : un appui sur "ma position" peut signifier un vrai
+      // déplacement — on réévalue la ville si le seuil est franchi.
+      await _loadProviders(checkCity: true);
       return _userPosition;
     }
     return null;
@@ -124,18 +142,62 @@ class HomeController extends ChangeNotifier {
   void setServiceFilter(String? id) {
     _serviceFilter = id;
     notifyListeners();
-    _loadProviders();
+    // Changement de filtre = pas un déplacement → pas de détection de ville
+    _loadProviders(checkCity: false);
   }
 
-  Future<void> _loadProviders() async {
+  /// Calcule si l'utilisateur s'est suffisamment déplacé par rapport à la
+  /// dernière position envoyée au backend pour valoir une nouvelle détection
+  /// de ville. Utilise la formule de Haversine (distance en km).
+  bool _shouldCheckCity(LatLng current) {
+    if (_lastCityCheckPosition == null) return true; // premier appel
+    return _haversineKm(_lastCityCheckPosition!, current) >= _cityCheckThresholdKm;
+  }
+
+  /// Distance Haversine entre deux coordonnées, en kilomètres.
+  double _haversineKm(LatLng a, LatLng b) {
+    const r = 6371.0; // rayon terrestre moyen en km
+    final dLat = _deg2rad(b.latitude  - a.latitude);
+    final dLng = _deg2rad(b.longitude - a.longitude);
+    final h = sin(dLat / 2) * sin(dLat / 2)
+        + cos(_deg2rad(a.latitude))
+        * cos(_deg2rad(b.latitude))
+        * sin(dLng / 2) * sin(dLng / 2);
+    return 2 * r * asin(sqrt(h));
+  }
+
+  double _deg2rad(double deg) => deg * pi / 180;
+
+  Future<void> _loadProviders({required bool checkCity}) async {
     if (_userPosition == null) return;
+
+    // FIX bug 1 : on décide ICI si on doit déclencher checkAndNotify.
+    // - checkCity == true  : l'appelant veut explicitement une vérification
+    //   (démarrage, appui "ma position") — on vérifie quand même le seuil
+    //   pour éviter un double-envoi si refreshLocation() est appelé deux fois
+    //   rapidement.
+    // - checkCity == false : appel périodique ou changement de filtre — on
+    //   ne vérifie jamais la ville, quel que soit le déplacement.
+    final doCheckCity = checkCity && _shouldCheckCity(_userPosition!);
+
     try {
       final data = await _api.getNearbyProviders(
         latitude:      _userPosition!.latitude,
         longitude:     _userPosition!.longitude,
         serviceTypeId: _serviceFilter,
+        // FIX bug 1 : on passe un flag au service API qui décide d'inclure
+        // ou non le paramètre skip_city_check dans la requête.
+        // Quand doCheckCity == false, on indique au backend de ne PAS
+        // appeler checkAndNotify, évitant ainsi l'envoi répété de la notif.
+        skipCityCheck: !doCheckCity,
       );
       _providers = data.map((e) => ProviderModel.fromJson(e as Map<String, dynamic>)).toList();
+
+      if (doCheckCity) {
+        _lastCityCheckPosition = _userPosition;
+        debugPrint('[HomeController] Détection de ville envoyée (déplacement ≥ ${_cityCheckThresholdKm}km ou premier appel)');
+      }
+
       await _buildMarkers();
     } catch (e) {
       debugPrint('[HomeController] $e');

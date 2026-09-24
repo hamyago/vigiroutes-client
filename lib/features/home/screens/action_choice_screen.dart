@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 /// Écran de choix affiché quand l'utilisateur appuie sur le bouton central.
-/// Il oriente soit vers une demande de dépannage, soit vers l'alerte urgences.
+/// Il oriente soit vers une demande de dépannage, soit vers l'alerte urgences,
+/// soit vers une demande de devis contrôle technique.
 class ActionChoiceScreen extends StatelessWidget {
   const ActionChoiceScreen({super.key});
 
@@ -35,6 +36,18 @@ class ActionChoiceScreen extends StatelessWidget {
                 subtitle: 'Sélectionner vous-même un prestataire\nparmi ceux à proximité',
                 onTap: () =>
                     context.pushReplacement('/user/request?mode=manual'),
+              ),
+              const SizedBox(height: 16),
+              // FIX bug 3 : ajout de l'option "Demande de devis CT".
+              // La route /ct/quote/new et l'écran CtQuoteNewScreen existent
+              // déjà dans le routeur mais n'étaient accessibles depuis aucun
+              // point d'entrée de l'interface.
+              _ChoiceCard(
+                color: const Color(0xFF38A169),
+                icon: Icons.fact_check_outlined,
+                title: 'Devis contrôle technique',
+                subtitle: 'Demandez un devis pour le contrôle technique\nde votre véhicule',
+                onTap: () => context.pushReplacement('/ct/quote/new'),
               ),
               const SizedBox(height: 16),
               _ChoiceCard(

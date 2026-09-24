@@ -99,13 +99,28 @@ class ApiService {
   }
 
   // ── Providers ─────────────────────────────────────────────────────────
+
+  /// FIX bug 1 (city_welcome répétée) :
+  /// Le paramètre [skipCityCheck] indique au backend de ne PAS appeler
+  /// checkAndNotify() pour cette requête. Il est passé à true lors des
+  /// rafraîchissements périodiques (toutes les 30 s) et à false uniquement
+  /// au premier chargement ou quand l'utilisateur appuie sur "ma position"
+  /// ET s'est déplacé de plus de 5 km depuis la dernière détection.
   Future<List<dynamic>> getNearbyProviders({
-    required double latitude, required double longitude,
-    double radiusKm = 10, String? serviceTypeId,
+    required double latitude,
+    required double longitude,
+    double radiusKm = 10,
+    String? serviceTypeId,
+    bool skipCityCheck = false,
   }) async {
     final res = await get('/user/providers/nearby', params: {
-      'latitude': latitude, 'longitude': longitude, 'radius_km': radiusKm,
-      if (serviceTypeId != null) 'service_type': serviceTypeId,
+      'latitude':  latitude,
+      'longitude': longitude,
+      'radius_km': radiusKm,
+      if (serviceTypeId  != null) 'service_type': serviceTypeId,
+      // FIX bug 1 : on n'envoie le paramètre que quand il vaut true pour
+      // garder la compatibilité avec les anciennes versions du backend.
+      if (skipCityCheck) 'skip_city_check': '1',
     });
     final d = res.data;
     if (d is Map && d['providers'] is List) return d['providers'] as List;
@@ -327,9 +342,9 @@ class ApiService {
       'store_id': storeId,
       'items': items,
       if (note != null && note.isNotEmpty) 'note': note,
-      if (deliveryLatitude != null) 'delivery_latitude': deliveryLatitude,
+      if (deliveryLatitude  != null) 'delivery_latitude':  deliveryLatitude,
       if (deliveryLongitude != null) 'delivery_longitude': deliveryLongitude,
-      if (deliveryAddress != null && deliveryAddress.isNotEmpty)
+      if (deliveryAddress   != null && deliveryAddress.isNotEmpty)
         'delivery_address': deliveryAddress,
     });
     return res.data as Map<String, dynamic>;

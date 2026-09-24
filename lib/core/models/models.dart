@@ -327,9 +327,24 @@ class VehicleModel {
   final String userId;
   final String brand;
   final String model;
-  final String plate;
+  final String plate;           // registration_number côté backend
   final String? color;
   final int? year;
+
+  /// Date d'expiration du contrôle technique (colonne : technical_visit_expires_at).
+  /// Null si non renseignée.
+  /// Les rappels push (vt_reminder_7d, vt_reminder_3d, vt_reminder_1d,
+  /// vt_expired) sont déclenchés par le backend à partir de cette date.
+  final DateTime? ctExpiryDate;
+
+  /// Date d'expiration de l'assurance (colonne : insurance_expires_at).
+  final DateTime? insuranceExpiryDate;
+
+  /// Date d'expiration de la vignette (colonne : vignette_expires_at).
+  final DateTime? vignetteExpiryDate;
+
+  /// Numéro de carte grise.
+  final String? carteGriseNumber;
 
   const VehicleModel({
     required this.id,
@@ -339,21 +354,64 @@ class VehicleModel {
     required this.plate,
     this.color,
     this.year,
+    this.ctExpiryDate,
+    this.insuranceExpiryDate,
+    this.vignetteExpiryDate,
+    this.carteGriseNumber,
   });
+
+  /// Nombre de jours avant expiration CT (négatif si déjà expiré).
+  int? get ctDaysLeft {
+    if (ctExpiryDate == null) return null;
+    return ctExpiryDate!.difference(DateTime.now()).inDays;
+  }
+
+  /// Vrai si le CT est expiré.
+  bool get ctExpired {
+    if (ctExpiryDate == null) return false;
+    return DateTime.now().isAfter(ctExpiryDate!);
+  }
 
   factory VehicleModel.fromJson(Map<String, dynamic> json) => VehicleModel(
         id:     json['id'] as String,
         userId: json['user_id'] as String,
         brand:  json['brand'] as String,
         model:  json['model'] as String,
-        plate:  json['plate'] as String,
+        // Le backend stocke "registration_number" ; "plate" en fallback.
+        plate:  json['registration_number'] as String?
+                    ?? json['plate'] as String? ?? '',
         color:  json['color'] as String?,
-        year:   json['year'] as int?,
+        year:   _toInt(json['year']) == 0 ? null : _toInt(json['year']),
+        // Colonne réelle : technical_visit_expires_at
+        ctExpiryDate: _parseDate(json['technical_visit_expires_at'])
+            ?? _parseDate(json['ct_expiry_date']),
+        insuranceExpiryDate: _parseDate(json['insurance_expires_at']),
+        vignetteExpiryDate:  _parseDate(json['vignette_expires_at']),
+        carteGriseNumber:    json['carte_grise_number'] as String?,
       );
 
+  static DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    return DateTime.tryParse(v.toString());
+  }
+
   Map<String, dynamic> toMap() => {
-    'id': id, 'brand': brand, 'model': model,
-    'plate': plate, 'color': color, 'year': year,
+    'id': id,
+    'brand': brand,
+    'model': model,
+    'registration_number': plate,
+    'color': color,
+    'year': year,
+    if (ctExpiryDate != null)
+      'technical_visit_expires_at':
+          ctExpiryDate!.toIso8601String().substring(0, 10),
+    if (insuranceExpiryDate != null)
+      'insurance_expires_at':
+          insuranceExpiryDate!.toIso8601String().substring(0, 10),
+    if (vignetteExpiryDate != null)
+      'vignette_expires_at':
+          vignetteExpiryDate!.toIso8601String().substring(0, 10),
+    if (carteGriseNumber != null) 'carte_grise_number': carteGriseNumber,
   };
 
   Map<String, dynamic> toJson() => toMap();
