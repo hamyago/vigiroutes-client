@@ -72,7 +72,7 @@ class _Step1VehicleSelection extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.all(16),
           child: Text(
-            'Select Your Vehicle',
+            'Sélectionner votre véhicule',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -88,13 +88,23 @@ class _Step1VehicleSelection extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(ctrl.error!, style: TextStyle(color: Colors.red)),
+                  Text(ctrl.error!, style: const TextStyle(color: Colors.red)),
                   const SizedBox(height: 8),
                   ElevatedButton(
                     onPressed: ctrl.loadVehicles,
-                    child: const Text('Retry'),
+                    child: const Text('Réessayer'),
                   ),
                 ],
+              ),
+            ),
+          )
+        else if (ctrl.vehicles.isEmpty)
+          const Expanded(
+            child: Center(
+              child: Text(
+                'Aucun véhicule enregistré.\nAjoutez un véhicule dans votre profil.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
               ),
             ),
           )
@@ -146,7 +156,7 @@ class _Step1VehicleSelection extends StatelessWidget {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text(
-                'Continue',
+                'Continuer',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
@@ -159,23 +169,44 @@ class _Step1VehicleSelection extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 2 — Center & Slot
+// FIX 1: initialCameraPosition → Abidjan (5.3599, -4.0083) au lieu de Dakar
+// FIX 2: date par défaut = aujourd'hui, chargée dès l'arrivée à cette étape
 // ─────────────────────────────────────────────────────────────────────────────
-class _Step2CenterAndSlot extends StatelessWidget {
+class _Step2CenterAndSlot extends StatefulWidget {
   final CtBookingController ctrl;
   const _Step2CenterAndSlot({required this.ctrl});
 
   @override
+  State<_Step2CenterAndSlot> createState() => _Step2CenterAndSlotState();
+}
+
+class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
+  @override
+  void initState() {
+    super.initState();
+    // FIX 2 : si aucune date n'est encore sélectionnée, prendre aujourd'hui
+    // et recharger les centres avec cette date.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctrl = widget.ctrl;
+      if (ctrl.selectedDate == null) {
+        ctrl.selectDate(DateTime.now());
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final ctrl = widget.ctrl;
     return Column(
       children: [
-        // Map
+        // Map — FIX 1 : coordonnées initiales = Abidjan
         SizedBox(
           height: 220,
           child: GoogleMap(
             onMapCreated: ctrl.onMapCreated,
             markers: ctrl.mapMarkers,
             initialCameraPosition: const CameraPosition(
-              target: LatLng(14.6937, -17.4441),
+              target: LatLng(5.3599, -4.0083), // Abidjan
               zoom: 12,
             ),
           ),
@@ -187,8 +218,8 @@ class _Step2CenterAndSlot extends StatelessWidget {
             children: [
               Text(
                 ctrl.selectedDate != null
-                    ? DateFormat('dd MMM yyyy').format(ctrl.selectedDate!)
-                    : 'Pick a date',
+                    ? DateFormat('dd MMM yyyy', 'fr').format(ctrl.selectedDate!)
+                    : 'Choisir une date',
                 style: TextStyle(color: AppColors.textPrimary),
               ),
               const Spacer(),
@@ -196,14 +227,15 @@ class _Step2CenterAndSlot extends StatelessWidget {
                 onPressed: () async {
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: DateTime.now(),
+                    initialDate: ctrl.selectedDate ?? DateTime.now(),
                     firstDate: DateTime.now(),
                     lastDate: DateTime.now().add(const Duration(days: 60)),
+                    locale: const Locale('fr'),
                   );
                   if (picked != null) ctrl.selectDate(picked);
                 },
                 icon: const Icon(Icons.calendar_today),
-                label: const Text('Change'),
+                label: const Text('Changer'),
               ),
             ],
           ),
@@ -214,6 +246,15 @@ class _Step2CenterAndSlot extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.all(24),
             child: CircularProgressIndicator(),
+          )
+        else if (ctrl.availableCenters.isEmpty)
+          Expanded(
+            child: Center(
+              child: Text(
+                'Aucun centre disponible pour cette date.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
           )
         else
           Expanded(
@@ -237,7 +278,7 @@ class _Step2CenterAndSlot extends StatelessWidget {
                         ),
                       ),
                       subtitle: Text(
-                        center.address ?? '',
+                        center.address ?? center.city,
                         style: TextStyle(color: AppColors.textSecondary),
                       ),
                       trailing: isSelected
@@ -255,25 +296,33 @@ class _Step2CenterAndSlot extends StatelessWidget {
                     ),
                     // Slots for this center
                     if (isSelected && ctrl.slots.isNotEmpty)
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: ctrl.slots.map((slot) {
-                          final isSlotSelected =
-                              ctrl.selectedSlot?.sessionId == slot.sessionId;
-                          return ChoiceChip(
-                            label: Text(slot.slotTime),
-                            selected: isSlotSelected,
-                            selectedColor: AppColors.primary,
-                            onSelected: (_) => ctrl.selectSlot(slot),
-                          );
-                        }).toList(),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: ctrl.slots.map((slot) {
+                            final isSlotSelected =
+                                ctrl.selectedSlot?.sessionId == slot.sessionId;
+                            return ChoiceChip(
+                              label: Text(slot.slotTime),
+                              selected: isSlotSelected,
+                              selectedColor: AppColors.primary,
+                              labelStyle: TextStyle(
+                                color: isSlotSelected ? Colors.white : AppColors.textPrimary,
+                              ),
+                              onSelected: slot.isAvailable
+                                  ? (_) => ctrl.selectSlot(slot)
+                                  : null,
+                            );
+                          }).toList(),
+                        ),
                       ),
-                    if (isSelected && ctrl.slots.isEmpty && ctrl.selectedDate != null)
+                    if (isSelected && ctrl.slots.isEmpty && ctrl.selectedDate != null && !ctrl.isLoading)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
-                          'No slots available for this date.',
+                          'Aucun créneau disponible pour cette date.',
                           style: TextStyle(color: AppColors.textSecondary),
                         ),
                       ),
@@ -288,7 +337,7 @@ class _Step2CenterAndSlot extends StatelessWidget {
             children: [
               OutlinedButton(
                 onPressed: () => ctrl.goBack(),
-                child: const Text('Back'),
+                child: const Text('Retour'),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -302,7 +351,7 @@ class _Step2CenterAndSlot extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text(
-                    'Continue',
+                    'Continuer',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -330,7 +379,7 @@ class _Step3TransportMode extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.all(16),
           child: Text(
-            'How will you bring your vehicle?',
+            'Comment amenez-vous votre véhicule ?',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -340,16 +389,16 @@ class _Step3TransportMode extends StatelessWidget {
         ),
         _TransportOption(
           value: 'self',
-          label: 'Drive It Yourself',
-          description: 'You drive your vehicle to the center.',
+          label: 'Je conduis moi-même',
+          description: 'Vous amenez votre véhicule au centre.',
           icon: Icons.directions_car,
           selected: ctrl.transportMode,
           onSelect: ctrl.setTransportMode,
         ),
         _TransportOption(
           value: 'tow',
-          label: 'Tow Service',
-          description: 'We tow your vehicle to the center.',
+          label: 'Remorquage',
+          description: 'Nous remorquons votre véhicule jusqu\'au centre.',
           icon: Icons.local_shipping,
           selected: ctrl.transportMode,
           onSelect: ctrl.setTransportMode,
@@ -357,8 +406,8 @@ class _Step3TransportMode extends StatelessWidget {
         ),
         _TransportOption(
           value: 'driver',
-          label: 'Driver Service',
-          description: 'A driver picks up and delivers your vehicle.',
+          label: 'Chauffeur',
+          description: 'Un chauffeur récupère et dépose votre véhicule.',
           icon: Icons.person,
           selected: ctrl.transportMode,
           onSelect: ctrl.setTransportMode,
@@ -377,7 +426,7 @@ class _Step3TransportMode extends StatelessWidget {
                 ),
                 Expanded(
                   child: Text(
-                    'I agree to hand over my keys to the driver.',
+                    'J\'accepte de remettre mes clés au chauffeur.',
                     style: TextStyle(color: AppColors.textPrimary),
                   ),
                 ),
@@ -392,7 +441,7 @@ class _Step3TransportMode extends StatelessWidget {
             children: [
               OutlinedButton(
                 onPressed: () => ctrl.goBack(),
-                child: const Text('Back'),
+                child: const Text('Retour'),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -415,7 +464,7 @@ class _Step3TransportMode extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
                       : const Text(
-                          'Continue',
+                          'Continuer',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                 ),
@@ -447,7 +496,7 @@ class _Step4Summary extends StatelessWidget {
             _SlotReservationTimer(secondsLeft: ctrl.reservationSecondsLeft),
           const SizedBox(height: 16),
           _SummaryCard(
-            title: 'Vehicle',
+            title: 'VÉHICULE',
             child: _SummaryRow(
               label: ctrl.selectedVehicle?.registrationNumber ?? '',
               value: '${ctrl.selectedVehicle?.brand ?? ''} ${ctrl.selectedVehicle?.model ?? ''}'.trim(),
@@ -455,46 +504,48 @@ class _Step4Summary extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _SummaryCard(
-            title: 'Technical Center',
+            title: 'CENTRE TECHNIQUE',
             child: Column(
               children: [
-                _SummaryRow(label: 'Center', value: ctrl.selectedCenter?.name ?? ''),
-                _SummaryRow(label: 'Address', value: ctrl.selectedCenter?.address ?? ''),
+                _SummaryRow(label: 'Centre', value: ctrl.selectedCenter?.name ?? ''),
+                _SummaryRow(label: 'Adresse', value: ctrl.selectedCenter?.address ?? ctrl.selectedCenter?.city ?? ''),
                 _SummaryRow(
                   label: 'Date',
-                  value: DateFormat('dd MMM yyyy').format(ctrl.selectedDate!),
+                  value: ctrl.selectedDate != null
+                      ? DateFormat('dd MMM yyyy', 'fr').format(ctrl.selectedDate!)
+                      : '',
                 ),
                 _SummaryRow(
-                  label: 'Slot',
-                  value: ctrl.selectedSlot?.slotTime ?? ctrl.selectedSlot?.sessionId ?? '',
+                  label: 'Créneau',
+                  value: ctrl.selectedSlot?.slotTime ?? '',
                 ),
               ],
             ),
           ),
           const SizedBox(height: 12),
           _SummaryCard(
-            title: 'Transport',
+            title: 'TRANSPORT',
             child: _SummaryRow(
               label: 'Mode',
               value: ctrl.transportMode == 'self'
-                  ? 'Drive Yourself'
+                  ? 'Je conduis moi-même'
                   : ctrl.transportMode == 'tow'
-                      ? 'Tow Service'
-                      : 'Driver Service',
+                      ? 'Remorquage'
+                      : 'Chauffeur',
             ),
           ),
           const SizedBox(height: 12),
           _SummaryCard(
-            title: 'Fees',
+            title: 'TARIFS',
             child: Column(
               children: [
                 _SummaryRow(
-                  label: 'Inspection fee',
+                  label: 'Frais de contrôle',
                   value: '${fmt.format(ctrl.bookingFee)} FCFA',
                 ),
                 if (ctrl.transportFee > 0)
                   _SummaryRow(
-                    label: 'Transport fee',
+                    label: 'Frais de transport',
                     value: '${fmt.format(ctrl.transportFee)} FCFA',
                   ),
                 Divider(color: AppColors.divider),
@@ -507,9 +558,8 @@ class _Step4Summary extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          // Payment method selection
           Text(
-            'Payment Method',
+            'Mode de paiement',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -533,7 +583,7 @@ class _Step4Summary extends StatelessWidget {
           ),
           _PaymentMethod(
             value: 'card',
-            label: 'Card',
+            label: 'Carte bancaire',
             icon: Icons.credit_card,
             selected: ctrl.paymentMethod,
             onSelect: ctrl.setPaymentMethod,
@@ -543,7 +593,7 @@ class _Step4Summary extends StatelessWidget {
             children: [
               OutlinedButton(
                 onPressed: () => ctrl.goBack(),
-                child: const Text('Back'),
+                child: const Text('Retour'),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -566,7 +616,7 @@ class _Step4Summary extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
                       : const Text(
-                          'Pay Now',
+                          'Payer maintenant',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                 ),
@@ -596,7 +646,7 @@ class _Step5Payment extends StatelessWidget {
           children: [
             if (ctrl.qrCodeUrl != null) ...[
               Text(
-                'Scan QR Code to Pay',
+                'Scannez le QR code pour payer',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -607,7 +657,7 @@ class _Step5Payment extends StatelessWidget {
               Image.network(ctrl.qrCodeUrl!, height: 200, width: 200),
             ] else if (ctrl.paymentUrl != null) ...[
               Text(
-                'Complete Payment',
+                'Finaliser le paiement',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -620,7 +670,7 @@ class _Step5Payment extends StatelessWidget {
                   // Open paymentUrl in browser
                 },
                 icon: const Icon(Icons.open_in_browser),
-                label: const Text('Open Payment Page'),
+                label: const Text('Ouvrir la page de paiement'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -630,7 +680,7 @@ class _Step5Payment extends StatelessWidget {
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
               Text(
-                'Processing payment...',
+                'Traitement en cours…',
                 style: TextStyle(color: AppColors.textSecondary),
               ),
             ],
@@ -644,9 +694,8 @@ class _Step5Payment extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper widgets — kept as-is (no GetX usage)
+// Helper widgets
 // ─────────────────────────────────────────────────────────────────────────────
-
 
 class _SlotReservationTimer extends StatelessWidget {
   final int secondsLeft;
@@ -678,7 +727,7 @@ class _SlotReservationTimer extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            'Slot reserved for: $display',
+            'Créneau réservé pour : $display',
             style: TextStyle(
               color: isUrgent ? Colors.red.shade700 : Colors.orange.shade700,
               fontWeight: FontWeight.w600,
