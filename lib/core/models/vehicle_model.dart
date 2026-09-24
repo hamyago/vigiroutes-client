@@ -10,8 +10,12 @@ class VehicleModel {
   final String? color;
   final int? year;
   final String category; // VP, VU, Moto, Camion
-  final String? energy;
+  final String? energy;  // gasoil | essence | hybride | electrique
   final String? chassisNumber;
+  final String? carteGriseNumber;  // Numéro carte grise
+  final int?    puissanceCv;       // Puissance fiscale en CV
+  final int?    placesAssises;     // Nombre de places assises
+  final String? usage;             // public | privée
 
   // Dates expiration
   final DateTime? technicalVisitExpiresAt;
@@ -35,6 +39,10 @@ class VehicleModel {
     required this.category,
     this.energy,
     this.chassisNumber,
+    this.carteGriseNumber,
+    this.puissanceCv,
+    this.placesAssises,
+    this.usage,
     this.technicalVisitExpiresAt,
     this.tvDateVerified = false,
     this.insuranceExpiresAt,
@@ -62,69 +70,108 @@ class VehicleModel {
     return VtAlertLevel.ok;
   }
 
+  static String _str(dynamic v, [String fallback = '']) =>
+      v == null ? fallback : v.toString();
+
+  static int? _intOrNull(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString());
+  }
+
   factory VehicleModel.fromJson(Map<String, dynamic> json) => VehicleModel(
-        id: json['id'] as String,
-        userId: json['user_id'] as String,
-        registrationNumber: json['registration_number'] as String,
-        brand: json['brand'] as String,
-        model: json['model'] as String,
-        color: json['color'] as String?,
-        year: json['year'] as int?,
-        category: json['category'] as String? ?? 'VP',
-        energy: json['energy'] as String?,
-        chassisNumber: json['chassis_number'] as String?,
+        id:                     _str(json['id']),
+        userId:                 _str(json['user_id']),
+        registrationNumber:     _str(json['registration_number']),
+        brand:                  _str(json['brand']),
+        model:                  _str(json['model']),
+        color:                  json['color']?.toString(),
+        year:                   _intOrNull(json['year']),
+        category:               _str(json['category'], 'VP'),
+        energy:                 json['energy']?.toString(),
+        chassisNumber:          json['chassis_number']?.toString(),
+        carteGriseNumber:       json['carte_grise_number']?.toString(),
+        puissanceCv:            _intOrNull(json['puissance_cv']),
+        placesAssises:          _intOrNull(json['places_assises']),
+        usage:                  json['usage']?.toString(),
         technicalVisitExpiresAt: json['technical_visit_expires_at'] != null
-            ? DateTime.parse(json['technical_visit_expires_at'] as String)
+            ? DateTime.tryParse(json['technical_visit_expires_at'].toString())
             : null,
-        tvDateVerified: json['tv_date_verified'] as bool? ?? false,
+        tvDateVerified:          json['tv_date_verified'] == true || json['tv_date_verified'] == 1,
         insuranceExpiresAt: json['insurance_expires_at'] != null
-            ? DateTime.parse(json['insurance_expires_at'] as String)
+            ? DateTime.tryParse(json['insurance_expires_at'].toString())
             : null,
-        insuranceDateVerified: json['insurance_date_verified'] as bool? ?? false,
+        insuranceDateVerified: json['insurance_date_verified'] == true || json['insurance_date_verified'] == 1,
         vignetteExpiresAt: json['vignette_expires_at'] != null
-            ? DateTime.parse(json['vignette_expires_at'] as String)
+            ? DateTime.tryParse(json['vignette_expires_at'].toString())
             : null,
-        photoUrl: json['photo_url'] as String?,
-        isPrimary: json['is_primary'] as bool? ?? false,
-        createdAt: DateTime.parse(json['created_at'] as String),
+        photoUrl:  json['photo_url']?.toString(),
+        isPrimary: json['is_primary'] == true || json['is_primary'] == 1,
+        createdAt: json['created_at'] != null
+            ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+            : DateTime.now(),
       );
 
   Map<String, dynamic> toJson() => {
-        'registration_number': registrationNumber,
-        'brand': brand,
-        'model': model,
-        'color': color,
-        'year': year,
-        'category': category,
-        'energy': energy,
-        'chassis_number': chassisNumber,
+        'registration_number':  registrationNumber,
+        'brand':                brand,
+        'model':                model,
+        'color':                color,
+        'year':                 year,
+        'category':             category,
+        'energy':               energy,
+        'chassis_number':       chassisNumber,
+        'carte_grise_number':   carteGriseNumber,
+        'puissance_cv':         puissanceCv,
+        'places_assises':       placesAssises,
+        'usage':                usage,
         'technical_visit_expires_at': technicalVisitExpiresAt?.toIso8601String().split('T').first,
         'insurance_expires_at': insuranceExpiresAt?.toIso8601String().split('T').first,
-        'vignette_expires_at': vignetteExpiresAt?.toIso8601String().split('T').first,
-        'is_primary': isPrimary,
+        'vignette_expires_at':  vignetteExpiresAt?.toIso8601String().split('T').first,
+        'is_primary':           isPrimary,
       };
 
   VehicleModel copyWith({
-    String? brand, String? model, String? color, int? year,
-    String? category, String? energy, DateTime? technicalVisitExpiresAt,
-    DateTime? insuranceExpiresAt, DateTime? vignetteExpiresAt, String? photoUrl,
-    bool? isPrimary,
+    String? brand,
+    String? model,
+    String? color,
+    int?    year,
+    String? category,
+    String? energy,
+    String? chassisNumber,
+    String? carteGriseNumber,
+    int?    puissanceCv,
+    int?    placesAssises,
+    String? usage,
+    DateTime? technicalVisitExpiresAt,
+    DateTime? insuranceExpiresAt,
+    DateTime? vignetteExpiresAt,
+    String? photoUrl,
+    bool?   isPrimary,
   }) => VehicleModel(
-        id: id, userId: userId, registrationNumber: registrationNumber,
-        brand: brand ?? this.brand,
-        model: model ?? this.model,
-        color: color ?? this.color,
-        year: year ?? this.year,
-        category: category ?? this.category,
-        energy: energy ?? this.energy,
+        id:                    id,
+        userId:                userId,
+        registrationNumber:    registrationNumber,
+        brand:                 brand  ?? this.brand,
+        model:                 model  ?? this.model,
+        color:                 color  ?? this.color,
+        year:                  year   ?? this.year,
+        category:              category ?? this.category,
+        energy:                energy ?? this.energy,
+        chassisNumber:         chassisNumber ?? this.chassisNumber,
+        carteGriseNumber:      carteGriseNumber ?? this.carteGriseNumber,
+        puissanceCv:           puissanceCv ?? this.puissanceCv,
+        placesAssises:         placesAssises ?? this.placesAssises,
+        usage:                 usage ?? this.usage,
         technicalVisitExpiresAt: technicalVisitExpiresAt ?? this.technicalVisitExpiresAt,
-        tvDateVerified: tvDateVerified,
-        insuranceExpiresAt: insuranceExpiresAt ?? this.insuranceExpiresAt,
+        tvDateVerified:        tvDateVerified,
+        insuranceExpiresAt:    insuranceExpiresAt ?? this.insuranceExpiresAt,
         insuranceDateVerified: insuranceDateVerified,
-        vignetteExpiresAt: vignetteExpiresAt ?? this.vignetteExpiresAt,
-        photoUrl: photoUrl ?? this.photoUrl,
-        isPrimary: isPrimary ?? this.isPrimary,
-        createdAt: createdAt,
+        vignetteExpiresAt:     vignetteExpiresAt ?? this.vignetteExpiresAt,
+        photoUrl:              photoUrl ?? this.photoUrl,
+        isPrimary:             isPrimary ?? this.isPrimary,
+        createdAt:             createdAt,
       );
 }
 
@@ -185,32 +232,40 @@ class TechnicalCenterModel {
 
   bool get isMobile => type == 'mobile';
 
-  double get displayLatitude => sessionLatitude ?? latitude ?? 5.345317;
+  double get displayLatitude  => sessionLatitude  ?? latitude  ?? 5.345317;
   double get displayLongitude => sessionLongitude ?? longitude ?? -4.024429;
 
+  static double? _dbl(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
   factory TechnicalCenterModel.fromJson(Map<String, dynamic> json) => TechnicalCenterModel(
-        id: json['id'] as String,
-        operatorId: json['operator_id'] as String,
-        operatorName: json['operator']?['name'] as String? ?? '',
-        name: json['name'] as String,
-        type: json['type'] as String? ?? 'fixed',
-        latitude: _toDoubleOrNull(json['latitude']),
-        longitude: _toDoubleOrNull(json['longitude']),
-        address: json['address'] as String?,
-        city: json['city'] as String? ?? 'Abidjan',
-        contactPhone: json['contact_phone'] as String?,
-        openingTime: json['opening_time'] as String? ?? '07:00',
-        closingTime: json['closing_time'] as String? ?? '17:00',
-        dailyCapacity: json['daily_capacity'] as int? ?? 20,
-        isActive: json['is_active'] as bool? ?? true,
-        photoUrl: json['photo_url'] as String?,
-        description: json['description'] as String?,
-        acceptedVehicleCategories: (json['accepted_vehicle_categories'] as List<dynamic>?)
-                ?.cast<String>() ??
+        id:           (json['id'] ?? '').toString(),
+        // L'API retourne operator_id en plat OU dans l'objet operator
+        operatorId:   (json['operator_id'] ?? json['operator']?['id'] ?? '').toString(),
+        // L'API retourne operator_name en plat OU dans l'objet operator
+        operatorName: (json['operator_name'] ?? json['operator']?['name'] ?? '').toString(),
+        name:         (json['name'] ?? '').toString(),
+        type:         (json['type'] ?? 'fixed').toString(),
+        latitude:     _dbl(json['latitude']),
+        longitude:    _dbl(json['longitude']),
+        address:      json['address']?.toString(),
+        city:         (json['city'] ?? 'Abidjan').toString(),
+        contactPhone: json['contact_phone']?.toString(),
+        openingTime:  (json['opening_time'] ?? '07:00').toString(),
+        closingTime:  (json['closing_time'] ?? '17:00').toString(),
+        dailyCapacity: json['daily_capacity'] is int ? json['daily_capacity'] : 20,
+        isActive:     json['is_active'] == true || json['is_active'] == 1,
+        photoUrl:     json['photo_url']?.toString(),
+        description:  json['description']?.toString(),
+        acceptedVehicleCategories:
+            (json['accepted_vehicle_categories'] as List<dynamic>?)?.cast<String>() ??
             ['VP', 'VU', 'Moto'],
-        sessionLatitude: _toDoubleOrNull(json['session_latitude']),
-        sessionLongitude: _toDoubleOrNull(json['session_longitude']),
-        sessionAddress: json['session_address'] as String?,
+        sessionLatitude:  _dbl(json['session_latitude']),
+        sessionLongitude: _dbl(json['session_longitude']),
+        sessionAddress:   json['session_address']?.toString(),
         availableSlots: (json['available_slots'] as List<dynamic>?)
                 ?.map((s) => SessionSlotModel.fromJson(s as Map<String, dynamic>))
                 .toList() ??
@@ -231,12 +286,21 @@ class SessionSlotModel {
     required this.isAvailable,
   });
 
-  factory SessionSlotModel.fromJson(Map<String, dynamic> json) => SessionSlotModel(
-        sessionId: json['session_id'] as String,
-        slotTime: json['slot_time'] as String,
-        remainingSlots: json['remaining_slots'] as int? ?? 0,
-        isAvailable: json['is_available'] as bool? ?? false,
-      );
+  factory SessionSlotModel.fromJson(Map<String, dynamic> json) {
+    final remaining = json['remaining_slots'] is int
+        ? json['remaining_slots'] as int
+        : int.tryParse(json['remaining_slots']?.toString() ?? '0') ?? 0;
+    // L'API renvoie remaining_slots (int), pas is_available (bool)
+    final available = json['is_available'] != null
+        ? (json['is_available'] == true || json['is_available'] == 1)
+        : remaining > 0;
+    return SessionSlotModel(
+      sessionId:      (json['session_id'] ?? '').toString(),
+      slotTime:       (json['slot_time'] ?? '').toString(),
+      remainingSlots: remaining,
+      isAvailable:    available,
+    );
+  }
 }
 
 // ── CtBookingModel ────────────────────────────────────────────────────────────
@@ -288,49 +352,41 @@ class CtBookingModel {
     required this.createdAt,
   });
 
-  bool get hasQr => qrToken != null && qrExpiresAt != null && qrExpiresAt!.isAfter(DateTime.now());
+  bool get hasQr =>
+      qrToken != null &&
+      qrExpiresAt != null &&
+      qrExpiresAt!.isAfter(DateTime.now());
+
+  static double _dbl(dynamic v) {
+    if (v == null) return 0;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? 0;
+  }
+
+  static DateTime? _dt(dynamic v) =>
+      v == null ? null : DateTime.tryParse(v.toString());
 
   factory CtBookingModel.fromJson(Map<String, dynamic> json) => CtBookingModel(
-        id: json['id'] as String,
-        reference: json['reference'] as String,
-        vehicle: VehicleModel.fromJson(json['vehicle'] as Map<String, dynamic>),
-        center: TechnicalCenterModel.fromJson(json['center'] as Map<String, dynamic>),
-        slotStartsAt: DateTime.parse(json['slot_starts_at'] as String),
-        slotReservedUntil: json['slot_reserved_until'] != null
-            ? DateTime.parse(json['slot_reserved_until'] as String)
-            : null,
-        transportMode: json['transport_mode'] as String? ?? 'self',
-        keyHandoverAccepted: json['key_handover_accepted'] as bool? ?? false,
-        bookingFee: _toDouble(json['booking_fee']),
-        transportFee: _toDouble(json['transport_fee']),
-        totalAmount: _toDouble(json['total_amount']),
-        paymentStatus: json['payment_status'] as String? ?? 'pending',
-        paidAt: json['paid_at'] != null ? DateTime.parse(json['paid_at'] as String) : null,
-        qrToken: json['qr_token'] as String?,
-        qrExpiresAt: json['qr_expires_at'] != null
-            ? DateTime.parse(json['qr_expires_at'] as String)
-            : null,
-        status: json['status'] as String,
-        vtResult: json['vt_result'] as String?,
-        vtReportNotes: json['vt_report_notes'] as String?,
-        vtCompletedAt: json['vt_completed_at'] != null
-            ? DateTime.parse(json['vt_completed_at'] as String)
-            : null,
-        nextVtDueDate: json['next_vt_due_date'] != null
-            ? DateTime.parse(json['next_vt_due_date'] as String)
-            : null,
-        createdAt: DateTime.parse(json['created_at'] as String),
+        id:                  (json['id'] ?? '').toString(),
+        reference:           (json['reference'] ?? '').toString(),
+        vehicle:             VehicleModel.fromJson(json['vehicle'] as Map<String, dynamic>),
+        center:              TechnicalCenterModel.fromJson(json['center'] as Map<String, dynamic>),
+        slotStartsAt:        _dt(json['slot_starts_at']) ?? DateTime.now(),
+        slotReservedUntil:   _dt(json['slot_reserved_until']),
+        transportMode:       (json['transport_mode'] ?? 'self').toString(),
+        keyHandoverAccepted: json['key_handover_accepted'] == true || json['key_handover_accepted'] == 1,
+        bookingFee:          _dbl(json['booking_fee']),
+        transportFee:        _dbl(json['transport_fee']),
+        totalAmount:         _dbl(json['total_amount']),
+        paymentStatus:       (json['payment_status'] ?? 'pending').toString(),
+        paidAt:              _dt(json['paid_at']),
+        qrToken:             json['qr_token']?.toString(),
+        qrExpiresAt:         _dt(json['qr_expires_at']),
+        status:              (json['status'] ?? 'pending').toString(),
+        vtResult:            json['vt_result']?.toString(),
+        vtReportNotes:       json['vt_report_notes']?.toString(),
+        vtCompletedAt:       _dt(json['vt_completed_at']),
+        nextVtDueDate:       _dt(json['next_vt_due_date']),
+        createdAt:           _dt(json['created_at']) ?? DateTime.now(),
       );
-}
-
-// Helpers
-double _toDouble(dynamic v) {
-  if (v == null) return 0;
-  if (v is num) return v.toDouble();
-  return double.tryParse(v.toString()) ?? 0;
-}
-double? _toDoubleOrNull(dynamic v) {
-  if (v == null) return null;
-  if (v is num) return v.toDouble();
-  return double.tryParse(v.toString());
 }
