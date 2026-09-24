@@ -13,19 +13,24 @@ class CtService {
 
   Future<List<VehicleModel>> getVehicles() async {
     final res = await _api.get('/ct/vehicles');
-    return (res.data['data'] as List)
-        .map((e) => VehicleModel.fromJson(e as Map<String, dynamic>))
+    // FIX : défense contre data null ou format inattendu
+    final raw = res.data;
+    final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
+    if (list == null) return [];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map((e) => VehicleModel.fromJson(e))
         .toList();
   }
 
   Future<VehicleModel> createVehicle(Map<String, dynamic> data) async {
     final res = await _api.post('/ct/vehicles', data: data);
-    return VehicleModel.fromJson(res.data['data']);
+    return VehicleModel.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
   Future<VehicleModel> updateVehicle(String id, Map<String, dynamic> data) async {
     final res = await _api.patch('/ct/vehicles/$id', data: data);
-    return VehicleModel.fromJson(res.data['data']);
+    return VehicleModel.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
   Future<void> deleteVehicle(String id) async {
@@ -44,8 +49,13 @@ class CtService {
       if (lat != null) 'lat': lat,
       if (lng != null) 'lng': lng,
     });
-    return (res.data['data'] as List)
-        .map((e) => TechnicalCenterModel.fromJson(e as Map<String, dynamic>))
+    // FIX : défense contre data null ou format inattendu
+    final raw = res.data;
+    final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
+    if (list == null) return [];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map((e) => TechnicalCenterModel.fromJson(e))
         .toList();
   }
 
@@ -55,8 +65,13 @@ class CtService {
       '/ct/centers/$centerId/slots',
       params: {'date': date},
     );
-    return (res.data['data'] as List)
-        .map((e) => SessionSlotModel.fromJson(e as Map<String, dynamic>))
+    // FIX : défense contre data null
+    final raw = res.data;
+    final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
+    if (list == null) return [];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map((e) => SessionSlotModel.fromJson(e))
         .toList();
   }
 
@@ -72,7 +87,7 @@ class CtService {
       'session_id': sessionId,
       if (transportOption != null) 'transport_option': transportOption,
     });
-    return CtBookingModel.fromJson(res.data['data']);
+    return CtBookingModel.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
   Future<Map<String, dynamic>> initiatePayment(String bookingId) async {
@@ -82,14 +97,19 @@ class CtService {
 
   Future<List<CtBookingModel>> getMyBookings() async {
     final res = await _api.get('/ct/bookings');
-    return (res.data['data'] as List)
-        .map((e) => CtBookingModel.fromJson(e as Map<String, dynamic>))
+    // FIX : défense contre data null
+    final raw = res.data;
+    final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
+    if (list == null) return [];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map((e) => CtBookingModel.fromJson(e))
         .toList();
   }
 
   Future<CtBookingModel> getBooking(String bookingId) async {
     final res = await _api.get('/ct/bookings/$bookingId');
-    return CtBookingModel.fromJson(res.data['data']);
+    return CtBookingModel.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
   Future<void> cancelBooking(String bookingId) async {

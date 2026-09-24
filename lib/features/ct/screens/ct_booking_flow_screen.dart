@@ -67,110 +67,132 @@ class _Step1VehicleSelection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            'Sélectionner votre véhicule',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+    return SafeArea(
+      top: false,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'Sélectionner votre véhicule',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
-        ),
-        if (ctrl.isLoading)
-          const Expanded(child: Center(child: CircularProgressIndicator()))
-        else if (ctrl.error != null)
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(ctrl.error!, style: const TextStyle(color: Colors.red)),
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    onPressed: ctrl.loadVehicles,
-                    child: const Text('Réessayer'),
-                  ),
-                ],
+          if (ctrl.isLoading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (ctrl.error != null)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        ctrl.error!,
+                        style: const TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: ctrl.loadVehicles,
+                      child: const Text('Réessayer'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (ctrl.vehicles.isEmpty)
+            const Expanded(
+              child: Center(
+                child: Text(
+                  'Aucun véhicule enregistré.\nAjoutez un véhicule dans votre profil.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: ctrl.vehicles.length,
+                separatorBuilder: (_, __) => Divider(color: AppColors.divider),
+                itemBuilder: (context, index) {
+                  final vehicle = ctrl.vehicles[index];
+                  final isSelected = ctrl.selectedVehicle?.id == vehicle.id;
+                  return ListTile(
+                    tileColor: isSelected
+                        ? AppColors.primary.withValues(alpha: 0.1)
+                        : AppColors.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(
+                        color: isSelected ? AppColors.primary : Colors.transparent,
+                      ),
+                    ),
+                    title: Text(
+                      vehicle.registrationNumber,
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${vehicle.brand} ${vehicle.model}'.trim(),
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                    trailing: isSelected
+                        ? Icon(Icons.check_circle, color: AppColors.primary)
+                        : null,
+                    onTap: () => ctrl.selectVehicle(vehicle),
+                  );
+                },
               ),
             ),
-          )
-        else if (ctrl.vehicles.isEmpty)
-          const Expanded(
-            child: Center(
-              child: Text(
-                'Aucun véhicule enregistré.\nAjoutez un véhicule dans votre profil.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
-              ),
+          // FIX : SafeArea bottom pour éviter que le bouton soit coupé
+          // par la barre de navigation système
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              8,
+              16,
+              MediaQuery.of(context).padding.bottom + 12,
             ),
-          )
-        else
-          Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: ctrl.vehicles.length,
-              separatorBuilder: (_, __) => Divider(color: AppColors.divider),
-              itemBuilder: (context, index) {
-                final vehicle = ctrl.vehicles[index];
-                final isSelected = ctrl.selectedVehicle?.id == vehicle.id;
-                return ListTile(
-                  tileColor: isSelected ? AppColors.primary.withValues(alpha: 0.1) : AppColors.surface,
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed:
+                    ctrl.selectedVehicle != null ? () => ctrl.goToStep2() : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(
-                      color: isSelected ? AppColors.primary : Colors.transparent,
-                    ),
-                  ),
-                  title: Text(
-                    vehicle.registrationNumber,
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '${vehicle.brand} ${vehicle.model}'.trim(),
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                  trailing: isSelected
-                      ? Icon(Icons.check_circle, color: AppColors.primary)
-                      : null,
-                  onTap: () => ctrl.selectVehicle(vehicle),
-                );
-              },
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: ctrl.selectedVehicle != null ? () => ctrl.goToStep2() : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text(
-                'Continuer',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text(
+                  'Continuer',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 2 — Center & Slot
-// FIX 1: initialCameraPosition → Abidjan (5.3599, -4.0083) au lieu de Dakar
+// FIX 1: initialCameraPosition → Abidjan (5.3599, -4.0083)
 // FIX 2: date par défaut = aujourd'hui, chargée dès l'arrivée à cette étape
+// FIX 3: SafeArea bottom pour les boutons
 // ─────────────────────────────────────────────────────────────────────────────
 class _Step2CenterAndSlot extends StatefulWidget {
   final CtBookingController ctrl;
@@ -184,8 +206,6 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
   @override
   void initState() {
     super.initState();
-    // FIX 2 : si aucune date n'est encore sélectionnée, prendre aujourd'hui
-    // et recharger les centres avec cette date.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctrl = widget.ctrl;
       if (ctrl.selectedDate == null) {
@@ -197,11 +217,13 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
   @override
   Widget build(BuildContext context) {
     final ctrl = widget.ctrl;
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
     return Column(
       children: [
-        // Map — FIX 1 : coordonnées initiales = Abidjan
+        // Carte — coordonnées Abidjan
         SizedBox(
-          height: 220,
+          height: 200,
           child: GoogleMap(
             onMapCreated: ctrl.onMapCreated,
             markers: ctrl.mapMarkers,
@@ -211,7 +233,7 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
             ),
           ),
         ),
-        // Date picker row
+        // Sélecteur de date
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -220,7 +242,10 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
                 ctrl.selectedDate != null
                     ? DateFormat('dd MMM yyyy', 'fr').format(ctrl.selectedDate!)
                     : 'Choisir une date',
-                style: TextStyle(color: AppColors.textPrimary),
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const Spacer(),
               TextButton.icon(
@@ -234,32 +259,55 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
                   );
                   if (picked != null) ctrl.selectDate(picked);
                 },
-                icon: const Icon(Icons.calendar_today),
+                icon: const Icon(Icons.calendar_today, size: 16),
                 label: const Text('Changer'),
               ),
             ],
           ),
         ),
-        Divider(color: AppColors.divider),
-        // Centers list
+        Divider(color: AppColors.divider, height: 1),
+        // Liste des centres
         if (ctrl.isLoading)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: CircularProgressIndicator(),
+          const Expanded(
+            child: Center(child: CircularProgressIndicator()),
           )
         else if (ctrl.availableCenters.isEmpty)
           Expanded(
             child: Center(
-              child: Text(
-                'Aucun centre disponible pour cette date.',
-                style: TextStyle(color: AppColors.textSecondary),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.location_off, size: 48, color: AppColors.textSecondary),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Aucun centre disponible\npour cette date.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 12),
+                  // FIX : bouton pour essayer une autre date plutôt que rester bloqué
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: ctrl.selectedDate ?? DateTime.now(),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 60)),
+                        locale: const Locale('fr'),
+                      );
+                      if (picked != null) ctrl.selectDate(picked);
+                    },
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: const Text('Choisir une autre date'),
+                  ),
+                ],
               ),
             ),
           )
         else
           Expanded(
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemCount: ctrl.availableCenters.length,
               separatorBuilder: (_, __) => Divider(color: AppColors.divider),
               itemBuilder: (context, index) {
@@ -274,7 +322,8 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
                         center.name,
                         style: TextStyle(
                           color: AppColors.textPrimary,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                       subtitle: Text(
@@ -294,7 +343,6 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
                         }
                       },
                     ),
-                    // Slots for this center
                     if (isSelected && ctrl.slots.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -309,7 +357,9 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
                               selected: isSlotSelected,
                               selectedColor: AppColors.primary,
                               labelStyle: TextStyle(
-                                color: isSlotSelected ? Colors.white : AppColors.textPrimary,
+                                color: isSlotSelected
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
                               ),
                               onSelected: slot.isAvailable
                                   ? (_) => ctrl.selectSlot(slot)
@@ -318,7 +368,10 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
                           }).toList(),
                         ),
                       ),
-                    if (isSelected && ctrl.slots.isEmpty && ctrl.selectedDate != null && !ctrl.isLoading)
+                    if (isSelected &&
+                        ctrl.slots.isEmpty &&
+                        ctrl.selectedDate != null &&
+                        !ctrl.isLoading)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
@@ -331,28 +384,35 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
               },
             ),
           ),
+        // FIX : boutons avec padding bottom adapté à la barre système
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.fromLTRB(16, 8, 16, bottomPad + 12),
           child: Row(
             children: [
               OutlinedButton(
                 onPressed: () => ctrl.goBack(),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                ),
                 child: const Text('Retour'),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: ctrl.selectedCenter != null && ctrl.selectedSlot != null
-                      ? () => ctrl.goToStep3()
-                      : null,
+                  onPressed:
+                      ctrl.selectedCenter != null && ctrl.selectedSlot != null
+                          ? () => ctrl.goToStep3()
+                          : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text(
                     'Continuer',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -366,6 +426,7 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 3 — Transport Mode
+// FIX : SafeArea bottom pour les boutons
 // ─────────────────────────────────────────────────────────────────────────────
 class _Step3TransportMode extends StatelessWidget {
   final CtBookingController ctrl;
@@ -373,6 +434,7 @@ class _Step3TransportMode extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -435,12 +497,16 @@ class _Step3TransportMode extends StatelessWidget {
           ),
         ],
         const Spacer(),
+        // FIX : padding bottom adapté à la barre système
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.fromLTRB(16, 8, 16, bottomPad + 12),
           child: Row(
             children: [
               OutlinedButton(
                 onPressed: () => ctrl.goBack(),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                ),
                 child: const Text('Retour'),
               ),
               const SizedBox(width: 12),
@@ -455,17 +521,20 @@ class _Step3TransportMode extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: ctrl.isLoading
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
                         )
                       : const Text(
                           'Continuer',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                 ),
               ),
@@ -487,8 +556,9 @@ class _Step4Summary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat('#,##0', 'fr');
+    final bottomPad = MediaQuery.of(context).padding.bottom;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 16, 16, bottomPad + 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -499,7 +569,9 @@ class _Step4Summary extends StatelessWidget {
             title: 'VÉHICULE',
             child: _SummaryRow(
               label: ctrl.selectedVehicle?.registrationNumber ?? '',
-              value: '${ctrl.selectedVehicle?.brand ?? ''} ${ctrl.selectedVehicle?.model ?? ''}'.trim(),
+              value:
+                  '${ctrl.selectedVehicle?.brand ?? ''} ${ctrl.selectedVehicle?.model ?? ''}'
+                      .trim(),
             ),
           ),
           const SizedBox(height: 12),
@@ -507,8 +579,14 @@ class _Step4Summary extends StatelessWidget {
             title: 'CENTRE TECHNIQUE',
             child: Column(
               children: [
-                _SummaryRow(label: 'Centre', value: ctrl.selectedCenter?.name ?? ''),
-                _SummaryRow(label: 'Adresse', value: ctrl.selectedCenter?.address ?? ctrl.selectedCenter?.city ?? ''),
+                _SummaryRow(
+                    label: 'Centre', value: ctrl.selectedCenter?.name ?? ''),
+                _SummaryRow(
+                  label: 'Adresse',
+                  value: ctrl.selectedCenter?.address ??
+                      ctrl.selectedCenter?.city ??
+                      '',
+                ),
                 _SummaryRow(
                   label: 'Date',
                   value: ctrl.selectedDate != null
@@ -593,6 +671,9 @@ class _Step4Summary extends StatelessWidget {
             children: [
               OutlinedButton(
                 onPressed: () => ctrl.goBack(),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                ),
                 child: const Text('Retour'),
               ),
               const SizedBox(width: 12),
@@ -607,17 +688,20 @@ class _Step4Summary extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: ctrl.isLoading
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
                         )
                       : const Text(
                           'Payer maintenant',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                 ),
               ),
@@ -673,7 +757,8 @@ class _Step5Payment extends StatelessWidget {
                 label: const Text('Ouvrir la page de paiement'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 ),
               ),
             ] else ...[
@@ -705,7 +790,8 @@ class _SlotReservationTimer extends StatelessWidget {
   Widget build(BuildContext context) {
     final minutes = secondsLeft ~/ 60;
     final seconds = secondsLeft % 60;
-    final display = '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    final display =
+        '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     final isUrgent = secondsLeft < 60;
 
     return Container(
@@ -729,7 +815,8 @@ class _SlotReservationTimer extends StatelessWidget {
           Text(
             'Créneau réservé pour : $display',
             style: TextStyle(
-              color: isUrgent ? Colors.red.shade700 : Colors.orange.shade700,
+              color:
+                  isUrgent ? Colors.red.shade700 : Colors.orange.shade700,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -769,7 +856,9 @@ class _TransportOption extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withValues(alpha: 0.08) : AppColors.surface,
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.08)
+              : AppColors.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? AppColors.primary : AppColors.divider,
@@ -778,7 +867,8 @@ class _TransportOption extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, color: isSelected ? AppColors.primary : AppColors.textSecondary),
+            Icon(icon,
+                color: isSelected ? AppColors.primary : AppColors.textSecondary),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -793,7 +883,8 @@ class _TransportOption extends StatelessWidget {
                   ),
                   Text(
                     description,
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style:
+                        TextStyle(color: AppColors.textSecondary, fontSize: 12),
                   ),
                 ],
               ),
@@ -842,7 +933,9 @@ class _PaymentMethod extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withValues(alpha: 0.08) : AppColors.surface,
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.08)
+              : AppColors.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? AppColors.primary : AppColors.divider,
@@ -851,13 +944,15 @@ class _PaymentMethod extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, color: isSelected ? AppColors.primary : AppColors.textSecondary),
+            Icon(icon,
+                color: isSelected ? AppColors.primary : AppColors.textSecondary),
             const SizedBox(width: 12),
             Text(
               label,
               style: TextStyle(
                 color: AppColors.textPrimary,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontWeight:
+                    isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
             const Spacer(),
@@ -966,7 +1061,9 @@ class _StepIndicator extends StatelessWidget {
                       duration: const Duration(milliseconds: 300),
                       height: 4,
                       decoration: BoxDecoration(
-                        color: isDone || isActive ? AppColors.primary : AppColors.divider,
+                        color: isDone || isActive
+                            ? AppColors.primary
+                            : AppColors.divider,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),

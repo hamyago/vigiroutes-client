@@ -42,6 +42,63 @@ class _RequestScreenState extends State<RequestScreen> {
   bool  _postFrameFired = false;
   bool  _initializeDone = false;
 
+  // ── Attente prestataire après soumission ──────────────────────────────────
+  // Quand submitRequest() réussit en mode auto, on affiche un écran "Recherche
+  // en cours…". Si aucun prestataire n'accepte sous 60 secondes (aucun FCM
+  // order_accepted reçu → aucune navigation vers /user/tracking), on affiche
+  // le popup "prestataires indisponibles" et on remet l'écran au début.
+  bool   _isSearching      = false;
+  Timer? _searchTimeoutTimer;
+  String? _searchingInterventionId;
+
+  void _startSearchTimeout(String interventionId) {
+    _searchingInterventionId = interventionId;
+    _searchTimeoutTimer?.cancel();
+    _searchTimeoutTimer = Timer(const Duration(seconds: 60), () {
+      if (!mounted || !_isSearching) return;
+      setState(() { _isSearching = false; });
+      _showNoProviderDialog();
+    });
+    setState(() { _isSearching = true; });
+  }
+
+  void _cancelSearch() {
+    _searchTimeoutTimer?.cancel();
+    _searchTimeoutTimer = null;
+    _searchingInterventionId = null;
+    if (mounted) setState(() { _isSearching = false; });
+  }
+
+  Future<void> _showNoProviderDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Prestataires indisponibles'),
+        content: const Text(
+          'Aucun prestataire n\'est disponible dans votre zone pour le moment.\n\n'
+          'Réessayez dans quelques minutes ou modifiez votre demande.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () { Navigator.of(ctx).pop(); },
+            child: const Text('Fermer'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              context.read<RequestController>().goBack();
+            },
+            child: const Text('Réessayer'),
+          ),
+        ],
+      ),
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   @override
   void initState() {
     super.initState();
@@ -108,6 +165,7 @@ class _RequestScreenState extends State<RequestScreen> {
   @override
   void dispose() {
     _watchdog?.cancel();
+    _searchTimeoutTimer?.cancel();
     super.dispose();
   }
 
@@ -132,14 +190,19 @@ class _RequestScreenState extends State<RequestScreen> {
           child: _StepIndicator(step: ctrl.step),
         ),
       ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: switch (ctrl.step) {
-          RequestStep.selectService  => _SelectServiceStep(ctrl: ctrl),
-          RequestStep.selectProvider => _SelectProviderStep(ctrl: ctrl),
-          RequestStep.confirm        => _ConfirmStep(ctrl: ctrl),
-        },
-      ),
+      body: _isSearching
+          ? _SearchingProviderView(onCancel: _cancelSearch)
+          : AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: switch (ctrl.step) {
+                RequestStep.selectService  => _SelectServiceStep(ctrl: ctrl),
+                RequestStep.selectProvider => _SelectProviderStep(ctrl: ctrl),
+                RequestStep.confirm        => _ConfirmStep(
+                    ctrl: ctrl,
+                    onSubmitted: _startSearchTimeout,
+                  ),
+              },
+            ),
     );
   }
 
@@ -535,7 +598,8 @@ class _ProviderTile extends StatelessWidget {
 
 class _ConfirmStep extends StatelessWidget {
   final RequestController ctrl;
-  const _ConfirmStep({required this.ctrl});
+  final void Function(String interventionId)? onSubmitted;
+  const _ConfirmStep({required this.ctrl, this.onSubmitted});
 
   @override
   Widget build(BuildContext context) {
@@ -648,9 +712,20 @@ class _ConfirmStep extends StatelessWidget {
             onPressed: () async {
               if (auth.user == null) return;
               final ok = await ctrl.submitRequest(user: auth.user!);
-              if (ok && context.mounted) {
-                context.go(
-                    '/user/tracking/${ctrl.createdInterventionId}');
+              if (!ok || !context.mounted) return;
+
+              final interventionId = ctrl.createdInterventionId;
+              if (interventionId == null) return;
+
+              if (ctrl.isAuto) {
+                // Mode auto : on ne navigue PAS vers tracking tout de suite.
+                // On attend 60s que le serveur dispatche et qu'un prestataire
+                // accepte (→ FCM order_accepted naviguera vers /user/tracking).
+                // Si personne ne répond en 60s → popup "indisponible".
+                onSubmitted?.call(interventionId);
+              } else {
+                // Mode manuel : le prestataire est déjà ciblé, on va au tracking.
+                context.go('/user/tracking/$interventionId');
               }
             },
           ),
@@ -740,4 +815,95 @@ class _StepIndicator extends StatelessWidget {
             const AlwaysStoppedAnimation<Color>(AppColors.primary),
         minHeight: 4,
       );
+}
+
+// ── Vue "Recherche prestataire en cours" ─────────────────────────────────────
+// Affichée après soumission en mode AUTO pendant max 60 secondes.
+// Si order_accepted arrive (FCM), NotificationRouterService navigue vers
+// /user/tracking et ce widget est retiré automatiquement.
+// Si le timeout s'écoule sans réponse, le callback onCancel est appelé et
+// un dialog "prestataires indisponibles" est affiché par le parent.
+class _SearchingProviderView extends StatefulWidget {
+  final VoidCallback onCancel;
+  const _SearchingProviderView({required this.onCancel});
+
+  @override
+  State<_SearchingProviderView> createState() => _SearchingProviderViewState();
+}
+
+class _SearchingProviderViewState extends State<_SearchingProviderView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+  int _dots = 0;
+  Timer? _dotTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat(reverse: true);
+
+    _dotTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) setState(() { _dots = (_dots + 1) % 4; });
+    });
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    _dotTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dots = '.' * _dots;
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Icône animée
+          AnimatedBuilder(
+            animation: _pulse,
+            builder: (_, __) => Opacity(
+              opacity: 0.5 + 0.5 * _pulse.value,
+              child: const Icon(
+                Icons.search,
+                size: 80,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+          Text(
+            'Recherche en cours$dots',
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Nous contactons les prestataires disponibles près de vous.\n'
+            'Vous serez notifié dès qu\'un prestataire accepte.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 48),
+          // Bouton annuler (optionnel)
+          TextButton.icon(
+            onPressed: widget.onCancel,
+            icon: const Icon(Icons.cancel_outlined),
+            label: const Text('Annuler la recherche'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
