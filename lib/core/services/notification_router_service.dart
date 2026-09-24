@@ -1,14 +1,30 @@
+import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Centralise la réaction aux notifications push reçues côté Client.
 ///
+/// Améliorations v2 :
+///   - Déduplication par messageId (TTL 60 s) → pas de doublon si FCM livre
+///     deux fois le même message.
+///   - Conscience de la route courante : le snackbar est supprimé si
+///     l'utilisateur est déjà sur l'écran cible.
+///   - En foreground, la notification locale n'est affichée QUE pour
+///     'emergency' (plein écran / heads-up critique). Pour les autres types,
+///     le snackbar suffit — l'utilisateur est déjà dans l'app.
+///   - Plugin flutter_local_notifications accepté depuis main.dart pour
+///     partager l'instance déjà initialisée (évite les échecs silencieux).
+///   - city_welcome : notifié une seule fois par ville. L'identifiant de ville
+///     (city_id ou city_slug) est persisté dans SharedPreferences. La
+///     notification ne revient que si le client entre dans une ville différente.
+///
 /// Types FCM gérés :
-///   - intervention_update  → notification locale foreground + navigation vers /user/tracking/:id au tap
-///   - no_provider          → notification locale + snackbar "Aucun prestataire disponible"
-///   - emergency            → notification locale + navigation vers /user/emergency au tap
+///   - intervention_update  → snackbar + navigation vers /user/tracking/:id au tap
+///   - no_provider          → snackbar "Aucun prestataire disponible"
+///   - emergency            → notification locale heads-up + snackbar + nav
 ///   - city_welcome         → /user/city-welcome (extra: payload)
 ///   - vt_reminder_30d/15d/7d/vt_expired → /ct/booking?vehicle_id=...
 ///   - booking_confirmed    → /ct/booking?booking_id=...&action=open_booking_qr
@@ -21,11 +37,22 @@ class NotificationRouterService {
 
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-  final _localNotifications = FlutterLocalNotificationsPlugin();
+  // Instance partagée depuis main.dart (déjà initialisée)
+  FlutterLocalNotificationsPlugin? _localNotifications;
+
+  // ── Déduplication ──────────────────────────────────────────────────────────
+  // Stocke les messageId déjà traités avec leur timestamp.
+  // Les entrées sont purgées après 60 secondes.
+  final Map<String, DateTime> _seenIds = {};
+  static const _dedupWindow = Duration(seconds: 60);
 
   /// À appeler une seule fois dans main(), après l'initialisation de Firebase
   /// et de flutter_local_notifications.
-  void init() {
+  ///
+  /// [localNotifications] doit être l'instance déjà initialisée dans main().
+  void init({FlutterLocalNotificationsPlugin? localNotifications}) {
+    _localNotifications = localNotifications;
+
     // Notification tapée alors que l'app était en arrière-plan
     FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
 
@@ -35,14 +62,52 @@ class NotificationRouterService {
     });
 
     // Notification reçue pendant que l'app est au premier plan.
-    // Android ne l'affiche PAS automatiquement : on affiche une notification
-    // locale + un snackbar pour les types les plus urgents.
     FirebaseMessaging.onMessage.listen(_handleForeground);
+  }
+
+  // ─── Déduplication ─────────────────────────────────────────────────────────
+
+  /// Retourne true si ce message a déjà été traité récemment.
+  bool _isDuplicate(RemoteMessage message) {
+    final id = message.messageId;
+    if (id == null) return false; // pas d'id → on laisse passer
+
+    _purgeOldIds();
+
+    if (_seenIds.containsKey(id)) return true;
+    _seenIds[id] = DateTime.now();
+    return false;
+  }
+
+  void _purgeOldIds() {
+    final cutoff = DateTime.now().subtract(_dedupWindow);
+    _seenIds.removeWhere((_, time) => time.isBefore(cutoff));
+  }
+
+  // ─── Route awareness ───────────────────────────────────────────────────────
+
+  /// Retourne le chemin de la route courante (ex. "/user/tracking/42").
+  String? _currentRoute() {
+    final context = navigatorKey.currentContext;
+    if (context == null) return null;
+    try {
+      return GoRouterState.of(context).uri.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Vérifie si l'utilisateur est déjà sur la route cible (ou un préfixe).
+  bool _isAlreadyOn(String prefix) {
+    final current = _currentRoute();
+    return current != null && current.startsWith(prefix);
   }
 
   // ─── Foreground ────────────────────────────────────────────────────────────
 
   void _handleForeground(RemoteMessage message) {
+    if (_isDuplicate(message)) return;
+
     final type = message.data['type'] as String?;
     if (type == null) return;
 
@@ -50,21 +115,39 @@ class NotificationRouterService {
     final title = notification?.title ?? _titleForType(type);
     final body  = notification?.body  ?? _bodyForData(message.data);
 
-    // Affiche une notification locale (visible même en foreground sur Android)
-    _showLocalNotification(type: type, title: title, body: body, data: message.data);
+    // Notification locale uniquement pour 'emergency' (heads-up / plein écran).
+    // Pour les autres types, l'utilisateur est dans l'app : le snackbar suffit.
+    if (type == 'emergency') {
+      _showLocalNotification(type: type, title: title, body: body, data: message.data);
+    }
 
-    // Snackbar supplémentaire pour les types urgents nécessitant une action immédiate
+    // city_welcome : vérification asynchrone (ville déjà vue ?)
+    if (type == 'city_welcome') {
+      _shouldShowCityWelcome(message.data).then((show) {
+        if (!show) return;
+        _showSnackbar(
+          title,
+          action: SnackBarAction(
+            label: 'Découvrir',
+            onPressed: () => _navigate('/user/city-welcome', extra: message.data),
+          ),
+        );
+      });
+      return;
+    }
+
     switch (type) {
       case 'intervention_update':
-        _showSnackbar(
-          body,
-          action: _interventionAction(message.data),
-        );
+        // Pas de snackbar si déjà sur le suivi de cette intervention
+        final id = message.data['intervention_id'] as String?;
+        if (id != null && _isAlreadyOn('/user/tracking/$id')) return;
+        _showSnackbar(body, action: _interventionAction(message.data));
 
       case 'no_provider':
         _showSnackbar('Aucun prestataire disponible pour le moment.');
 
       case 'emergency':
+        // Toujours affiché — urgence critique
         _showSnackbar(
           '🚨 Urgence activée',
           action: SnackBarAction(
@@ -73,7 +156,6 @@ class NotificationRouterService {
           ),
         );
 
-      // CT types : snackbar simple + action vers /ct/booking
       case 'vt_reminder_30d':
       case 'vt_reminder_15d':
       case 'vt_reminder_7d':
@@ -82,6 +164,8 @@ class NotificationRouterService {
       case 'vehicle_at_center':
       case 'vt_result':
       case 'transport_update':
+        // Pas de snackbar si déjà dans le module CT
+        if (_isAlreadyOn('/ct/booking')) return;
         _showSnackbar(
           body,
           action: SnackBarAction(
@@ -90,19 +174,41 @@ class NotificationRouterService {
           ),
         );
 
-      // city_welcome : pas de snackbar en foreground
       default:
         break;
     }
   }
 
+  // ─── city_welcome — une seule fois par ville ──────────────────────────────
+
+  /// Clé SharedPreferences qui stocke le slug/id de la dernière ville notifiée.
+  static const _kLastWelcomeCity = 'notif_last_welcome_city';
+
+  /// Retourne true si ce city_welcome doit être affiché (ville nouvelle).
+  /// Persiste l'identifiant de ville pour les appels suivants.
+  Future<bool> _shouldShowCityWelcome(Map<String, dynamic> data) async {
+    // Le backend doit envoyer city_id OU city_slug pour identifier la ville.
+    final cityKey = (data['city_id'] ?? data['city_slug'])?.toString();
+    if (cityKey == null || cityKey.isEmpty) return true; // pas d'id → affiche
+
+    final prefs = await SharedPreferences.getInstance();
+    final lastCity = prefs.getString(_kLastWelcomeCity);
+
+    if (lastCity == cityKey) return false; // même ville → ignorer
+
+    await prefs.setString(_kLastWelcomeCity, cityKey);
+    return true;
+  }
+
   // ─── Tap (background / cold start) ─────────────────────────────────────────
 
   void _handleTap(RemoteMessage message) {
+    // Pas de déduplication sur les taps : le tap est intentionnel.
     final type = message.data['type'] as String?;
 
     switch (type) {
       case 'city_welcome':
+        // Au tap, on navigue directement — l'utilisateur a déjà vu la notif.
         _navigate('/user/city-welcome', extra: message.data);
 
       case 'intervention_update':
@@ -128,7 +234,7 @@ class NotificationRouterService {
     }
   }
 
-  // ─── Notification locale foreground ─────────────────────────────────────────
+  // ─── Notification locale (emergency uniquement en foreground) ───────────────
 
   Future<void> _showLocalNotification({
     required String type,
@@ -136,8 +242,11 @@ class NotificationRouterService {
     required String body,
     required Map<String, dynamic> data,
   }) async {
+    final plugin = _localNotifications;
+    if (plugin == null) return; // non initialisé → silencieux
+
     try {
-      await _localNotifications.show(
+      await plugin.show(
         type.hashCode,
         title,
         body,
@@ -146,9 +255,9 @@ class NotificationRouterService {
             'intervention_updates',
             'Mises à jour interventions',
             channelDescription: 'Notifications de suivi de vos demandes d\'assistance',
-            importance: type == 'emergency' ? Importance.max : Importance.high,
-            priority : type == 'emergency' ? Priority.max  : Priority.high,
-            fullScreenIntent: type == 'emergency',
+            importance: Importance.max,
+            priority: Priority.max,
+            fullScreenIntent: true,
             playSound: true,
             enableVibration: true,
             ticker: title,
@@ -161,26 +270,25 @@ class NotificationRouterService {
         ),
       );
     } catch (_) {
-      // flutter_local_notifications non initialisé ou erreur → le snackbar suffit
+      // Erreur plugin → le snackbar suffit
     }
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   void _navigateToCT(Map<String, dynamic> data) {
-    final type = data['type'] as String?;
-    final bookingId = data['booking_id'] as String?;
-    final vehicleId = data['vehicle_id'] as String?;
-    final result = data['result'] as String?;
-    final providerStatus = data['provider_status'] as String?;
-    final action = data['action'] as String?;
+    final bookingId      = data['booking_id']      as String?;
+    final vehicleId      = data['vehicle_id']       as String?;
+    final result         = data['result']            as String?;
+    final providerStatus = data['provider_status']   as String?;
+    final action         = data['action']            as String?;
 
     final params = <String, String>{};
-    if (bookingId != null) params['booking_id'] = bookingId;
-    if (vehicleId != null) params['vehicle_id'] = vehicleId;
-    if (result != null) params['result'] = result;
-    if (providerStatus != null) params['provider_status'] = providerStatus;
-    if (action != null) params['action'] = action;
+    if (bookingId      != null) params['booking_id']      = bookingId;
+    if (vehicleId      != null) params['vehicle_id']       = vehicleId;
+    if (result         != null) params['result']            = result;
+    if (providerStatus != null) params['provider_status']   = providerStatus;
+    if (action         != null) params['action']            = action;
 
     final query = params.entries
         .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
@@ -202,14 +310,16 @@ class NotificationRouterService {
   void _showSnackbar(String text, {SnackBarAction? action}) {
     final context = navigatorKey.currentContext;
     if (context == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(text),
-        duration: const Duration(seconds: 5),
-        behavior: SnackBarBehavior.floating,
-        action: action,
-      ),
-    );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar() // évite l'empilement de snackbars
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          duration: const Duration(seconds: 5),
+          behavior: SnackBarBehavior.floating,
+          action: action,
+        ),
+      );
   }
 
   void _navigate(String route, {Object? extra}) {

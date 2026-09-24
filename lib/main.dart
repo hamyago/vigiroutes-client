@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/date_symbol_data_local.dart'; // FIX : initialisation locale intl
 import 'package:provider/provider.dart';
 import 'core/services/api_service.dart';
 import 'core/services/notification_router_service.dart';
@@ -19,7 +21,7 @@ import 'shared/navigation/app_router.dart';
 const AndroidNotificationChannel _interventionChannel = AndroidNotificationChannel(
   'intervention_updates',
   'Mises à jour interventions',
-  description: 'Notifications de suivi de vos demandes d\'assistance',
+  description: "Notifications de suivi de vos demandes d'assistance",
   importance: Importance.high,
   playSound: true,
   enableVibration: true,
@@ -34,7 +36,10 @@ final FlutterLocalNotificationsPlugin _localNotifications =
 // pour les types importants (intervention_update, no_provider, etc.).
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // FIX : try/catch au cas où Firebase est déjà initialisé dans cet isolate.
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (_) {}
 
   final data = message.data;
   final type = data['type'] as String?;
@@ -75,7 +80,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       android: AndroidNotificationDetails(
         'intervention_updates',
         'Mises à jour interventions',
-        channelDescription: 'Notifications de suivi de vos demandes d\'assistance',
+        channelDescription: "Notifications de suivi de vos demandes d'assistance",
         importance: type == 'emergency' ? Importance.max : Importance.high,
         priority : type == 'emergency' ? Priority.max  : Priority.high,
         fullScreenIntent: type == 'emergency',
@@ -110,9 +115,9 @@ String _titleForType(String type) => switch (type) {
 String _bodyForData(Map<String, dynamic> data) {
   final type = data['type'] as String? ?? '';
   return switch (type) {
-    'no_provider'   => 'Aucun prestataire n\'est disponible pour le moment.',
-    'vt_expired'    => 'Votre contrôle technique est expiré. Prenez rendez-vous.',
-    _               => 'Appuyez pour voir les détails.',
+    'no_provider' => "Aucun prestataire n'est disponible pour le moment.",
+    'vt_expired'  => 'Votre contrôle technique est expiré. Prenez rendez-vous.',
+    _             => 'Appuyez pour voir les détails.',
   };
 }
 
@@ -120,6 +125,10 @@ String _bodyForData(Map<String, dynamic> data) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // FIX : initialiser les données de locale fr avant tout affichage de date.
+  // Sans cet appel, DateFormat('...', 'fr') lève LocaleDataException.
+  await initializeDateFormatting('fr', null);
 
   ErrorWidget.builder = (FlutterErrorDetails details) => Material(
         color: const Color(0xFF8B0000),
@@ -146,12 +155,14 @@ void main() async {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
-  Isolate.current.addErrorListener(RawReceivePort((pair) async {
+  // FIX : stocker le port pour éviter qu'il soit GC'd immédiatement.
+  final _errorPort = RawReceivePort((pair) async {
     final list = pair as List<dynamic>;
     await FirebaseCrashlytics.instance.recordError(
       list.first, list.last as StackTrace?, fatal: true,
     );
-  }).sendPort);
+  });
+  Isolate.current.addErrorListener(_errorPort.sendPort);
 
   // ── FCM background handler ───────────────────────────────────────────────
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -215,9 +226,6 @@ class _RouterWidgetState extends State<_RouterWidget> {
   Widget build(BuildContext context) => MaterialApp.router(
         title: 'VigiRoutes',
         debugShowCheckedModeBanner: false,
-        // navigatorKey est passé au GoRouter dans app_router.dart :
-        // GoRouter(navigatorKey: NotificationRouterService.instance.navigatorKey)
-        // MaterialApp.router ne l'accepte pas directement.
         theme: ThemeData(
           colorSchemeSeed: const Color(0xFFFF6B35),
           useMaterial3: true,
