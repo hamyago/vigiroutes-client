@@ -215,9 +215,9 @@ class _RouterWidgetState extends State<_RouterWidget> {
   Widget build(BuildContext context) => MaterialApp.router(
         title: 'VigiRoutes',
         debugShowCheckedModeBanner: false,
-        // ── FIX CRITIQUE : navigatorKey requis pour snackbars / navigation ──
-        // depuis NotificationRouterService (foreground FCM).
-        navigatorKey: NotificationRouterService.instance.navigatorKey,
+        // navigatorKey est passé au GoRouter dans app_router.dart :
+        // GoRouter(navigatorKey: NotificationRouterService.instance.navigatorKey)
+        // MaterialApp.router ne l'accepte pas directement.
         theme: ThemeData(
           colorSchemeSeed: const Color(0xFFFF6B35),
           useMaterial3: true,
