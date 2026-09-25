@@ -62,16 +62,81 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     }
   }
 
+  // FIX Bug C : dialog de confirmation + message d'erreur lisible
+  Future<void> _confirmDelete(String id, String label) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Supprimer ce véhicule ?'),
+        content: Text(
+          'Voulez-vous supprimer "$label" ?\n\n'
+          'Cette action est irréversible.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) await _delete(id);
+  }
+
   Future<void> _delete(String id) async {
+    // Capturer le messenger avant tout await pour éviter le "use_build_context_synchronously"
+    // et l'appel sur un context démonté. hideCurrentSnackBar() évite aussi d'empiler
+    // plusieurs snackbars si l'utilisateur supprime plusieurs véhicules rapidement.
     final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
     try {
       await ApiService.instance.deleteVehicle(id);
       await _load();
+      // Vérifier mounted APRÈS les awaits
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Véhicule supprimé'),
+        backgroundColor: AppColors.success,
+      ));
     } catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text('Erreur : $e')));
-      }
+      if (!mounted) return;
+      // FIX Bug C : message d'erreur lisible au lieu du raw DioException
+      final msg = _readableError(e);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 4),
+      ));
     }
+  }
+
+  /// FIX Bug C : extrait un message lisible depuis les erreurs Dio/HTTP.
+  String _readableError(Object e) {
+    final raw = e.toString();
+    // DioException contient souvent le message du serveur dans son toString
+    if (raw.contains('500') || raw.contains('Internal Server Error')) {
+      return 'Impossible de supprimer ce véhicule (erreur serveur).\n'
+             'Vérifiez que le véhicule n\'a pas de réservation active.';
+    }
+    if (raw.contains('404')) {
+      return 'Véhicule introuvable. Il a peut-être déjà été supprimé.';
+    }
+    if (raw.contains('403') || raw.contains('unauthorized')) {
+      return 'Vous n\'êtes pas autorisé à supprimer ce véhicule.';
+    }
+    if (raw.contains('SocketException') || raw.contains('connection')) {
+      return 'Pas de connexion internet. Réessayez.';
+    }
+    return 'Erreur lors de la suppression. Réessayez.';
   }
 
   Future<void> _showAddVehicle() async {
@@ -125,10 +190,15 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                     itemCount: _vehicles.length,
-                    itemBuilder: (_, i) => _VehicleTile(
-                      vehicle: _vehicles[i],
-                      onDelete: () => _delete(_vehicles[i].id),
-                    ),
+                    itemBuilder: (_, i) {
+                      final v = _vehicles[i];
+                      final label = '${v.brand} ${v.model} ${v.plate}'.trim();
+                      return _VehicleTile(
+                        vehicle: v,
+                        // FIX Bug C : passer par _confirmDelete
+                        onDelete: () => _confirmDelete(v.id, label),
+                      );
+                    },
                   ),
       ),
     );

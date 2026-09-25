@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -44,12 +45,25 @@ class _RequestScreenState extends State<RequestScreen> {
 
   // ── Attente prestataire après soumission ──────────────────────────────────
   // Quand submitRequest() réussit en mode auto, on affiche un écran "Recherche
-  // en cours…". Si aucun prestataire n'accepte sous 60 secondes (aucun FCM
-  // order_accepted reçu → aucune navigation vers /user/tracking), on affiche
-  // le popup "prestataires indisponibles" et on remet l'écran au début.
+  // en cours…".
+  //
+  // FIX Bug A : 3 cas de sortie de la phase de recherche :
+  //   1. Timeout 60s sans réponse → popup "indisponible"
+  //   2. FCM intervention_update avec statut accepted/dispatched → navigation
+  //      vers /user/tracking (gérée par NotificationRouterService)
+  //      + _cancelSearch() pour nettoyer l'état local
+  //   3. FCM no_provider → _cancelSearch() + popup "indisponible"
+  //
+  // Le NotificationRouterService navigue vers /user/tracking quand il reçoit
+  // intervention_update. Ce faisant, RequestScreen est toujours dans la pile.
+  // Sans _cancelSearch(), si l'utilisateur revient en arrière il verrait
+  // encore l'écran de recherche (état incohérent).
   bool   _isSearching      = false;
   Timer? _searchTimeoutTimer;
   String? _searchingInterventionId;
+
+  // FIX Bug A : écouter les FCM foreground pendant la recherche
+  StreamSubscription<RemoteMessage>? _fcmSubscription;
 
   void _startSearchTimeout(String interventionId) {
     _searchingInterventionId = interventionId;
@@ -60,27 +74,69 @@ class _RequestScreenState extends State<RequestScreen> {
       _showNoProviderDialog();
     });
     setState(() { _isSearching = true; });
+
+    // FIX Bug A : écouter les messages FCM foreground pour reagir en temps réel
+    _fcmSubscription?.cancel();
+    _fcmSubscription = FirebaseMessaging.onMessage.listen(_onFcmDuringSearch);
+  }
+
+  // FIX Bug A : réaction FCM pendant la phase de recherche
+  void _onFcmDuringSearch(RemoteMessage message) {
+    if (!mounted || !_isSearching) return;
+    final type = message.data['type'] as String?;
+    final id   = message.data['intervention_id'] as String?;
+
+    // Vérifier que le message concerne NOTRE intervention en cours
+    final isOurIntervention = id == null || id == _searchingInterventionId;
+    if (!isOurIntervention) return;
+
+    if (type == 'no_provider') {
+      // Aucun prestataire disponible — sortir de la recherche
+      _cancelSearch();
+      _showNoProviderDialog();
+    } else if (type == 'intervention_update') {
+      final status = message.data['status'] as String?;
+      if (status == 'accepted' || status == 'dispatched' || status == 'en_route') {
+        // Un prestataire a accepté — NotificationRouterService navigue déjà
+        // vers /user/tracking. On nettoie juste l'état local.
+        _cancelSearch();
+        // Navigation vers tracking si elle n'a pas encore eu lieu
+        if (id != null && mounted) {
+          context.push('/user/tracking/$id');
+        }
+      } else if (status == 'cancelled' || status == 'rejected' || status == 'failed') {
+        // La demande a été annulée/rejetée
+        _cancelSearch();
+        _showNoProviderDialog(
+          title: 'Demande annulée',
+          message: 'La demande a été annulée. Veuillez réessayer.',
+        );
+      }
+    }
   }
 
   void _cancelSearch() {
     _searchTimeoutTimer?.cancel();
     _searchTimeoutTimer = null;
     _searchingInterventionId = null;
+    _fcmSubscription?.cancel(); // FIX Bug A : arrêter l'écoute FCM
+    _fcmSubscription = null;
     if (mounted) setState(() { _isSearching = false; });
   }
 
-  Future<void> _showNoProviderDialog() async {
+  Future<void> _showNoProviderDialog({
+    String title   = 'Prestataires indisponibles',
+    String message = 'Aucun prestataire n\'est disponible dans votre zone pour le moment.\n\n'
+                     'Réessayez dans quelques minutes ou modifiez votre demande.',
+  }) async {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Prestataires indisponibles'),
-        content: const Text(
-          'Aucun prestataire n\'est disponible dans votre zone pour le moment.\n\n'
-          'Réessayez dans quelques minutes ou modifiez votre demande.',
-        ),
+        title: Text(title),
+        content: Text(message),
         actions: [
           TextButton(
             onPressed: () { Navigator.of(ctx).pop(); },
@@ -166,6 +222,7 @@ class _RequestScreenState extends State<RequestScreen> {
   void dispose() {
     _watchdog?.cancel();
     _searchTimeoutTimer?.cancel();
+    _fcmSubscription?.cancel(); // FIX Bug A
     super.dispose();
   }
 
@@ -178,6 +235,11 @@ class _RequestScreenState extends State<RequestScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),
           onPressed: () {
+            if (_isSearching) {
+              // FIX Bug A : annuler la recherche si on appuie sur retour
+              _cancelSearch();
+              return;
+            }
             if (ctrl.step == RequestStep.selectService) {
               context.pop();
             } else {
@@ -417,179 +479,100 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
   @override
   Widget build(BuildContext context) {
     final service = widget.ctrl.selectedService;
-    return Column(children: [
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        color: AppColors.primaryLight,
-        child: Text(
-          'Service : ${service?.emoji} ${service?.name}',
-          style: const TextStyle(
-              fontWeight: FontWeight.w600, fontSize: 15),
+
+    if (_noPosition) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.location_off, size: 48, color: AppColors.textMuted),
+              const SizedBox(height: 16),
+              const Text(
+                'Position GPS indisponible.\nActivez le GPS et réessayez.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadProviders,
+                child: const Text('Réessayer'),
+              ),
+            ],
+          ),
         ),
-      ),
-      Expanded(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _noPosition
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.location_off,
-                              color: AppColors.error, size: 48),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Impossible d\'obtenir votre position.\n'
-                            'Vérifiez que le GPS est activé et que '
-                            'l\'autorisation de localisation est accordée '
-                            'à VigiRoutes.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.textSecondary),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: _loadProviders,
-                            child: const Text('Réessayer'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : _providers.isEmpty
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('😔', style: TextStyle(fontSize: 48)),
-                        SizedBox(height: 12),
-                        Text(
-                          'Aucun prestataire disponible\ndans un rayon de 10 km.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _providers.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: 8),
-                    itemBuilder: (_, i) => _ProviderTile(
-                      provider: _providers[i],
-                      onTap: () =>
-                          widget.ctrl.selectProvider(_providers[i]),
-                    ),
-                  ),
-      ),
-    ]);
-  }
-}
-
-class _ProviderTile extends StatelessWidget {
-  final ProviderModel provider;
-  final VoidCallback onTap;
-  const _ProviderTile({required this.provider, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    // Résoudre l'emoji depuis le slug ou l'ID
-    final stService = ServiceTypeService.instance;
-    String emoji = '🛠️';
-    if (provider.serviceTypes.isNotEmpty) {
-      final raw = provider.serviceTypes.first;
-      final st  = stService.findById(raw) ?? stService.findBySlug(raw);
-      emoji     = st?.emoji ?? '🛠️';
+      );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 8)
-        ],
-      ),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            CircleAvatar(
-              radius: 24,
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_providers.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.search_off, size: 48, color: AppColors.textMuted),
+              const SizedBox(height: 16),
+              Text(
+                service != null
+                    ? 'Aucun prestataire disponible pour "${service.name}" près de vous.'
+                    : 'Aucun prestataire disponible près de vous.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 15),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadProviders,
+                child: const Text('Actualiser'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _providers.length,
+      itemBuilder: (_, i) {
+        final p = _providers[i];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leading: CircleAvatar(
               backgroundColor: AppColors.primaryLight,
-              backgroundImage: provider.photoUrl != null
-                  ? NetworkImage(provider.photoUrl!) : null,
-              child: provider.photoUrl == null
-                  ? Text(emoji,
-                      style: const TextStyle(fontSize: 20)) : null,
-            ),
-            if (provider.isAvailable)
-              Positioned(
-                right: -2, bottom: -2,
-                child: Container(
-                  width: 14, height: 14,
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                ),
-              ),
-          ],
-        ),
-        title: Text(provider.name,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Row(children: [
-          const Icon(Icons.star, size: 13, color: Colors.amber),
-          const SizedBox(width: 3),
-          Text(provider.rating.toStringAsFixed(1),
-              style: const TextStyle(fontSize: 12)),
-          if (provider.distanceKm != null) ...[
-            const Text('  ·  ',
-                style: TextStyle(color: AppColors.textMuted)),
-            const Icon(Icons.location_on,
-                size: 13, color: AppColors.textMuted),
-            Text(' ${provider.distanceKm!.toStringAsFixed(1)} km',
-                style: const TextStyle(
-                    fontSize: 12, color: AppColors.textMuted)),
-          ],
-        ]),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            const Icon(Icons.arrow_forward_ios,
-                size: 14, color: AppColors.textMuted),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: provider.isAvailable
-                    ? Colors.green.shade50 : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(6),
-              ),
               child: Text(
-                provider.isAvailable ? 'Disponible' : 'Occupé',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: provider.isAvailable
-                      ? Colors.green.shade700 : Colors.grey,
-                  fontWeight: FontWeight.w500,
-                ),
+                p.name.isNotEmpty ? p.name[0].toUpperCase() : '?',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-          ],
-        ),
-        onTap: provider.isAvailable ? onTap : null,
-      ),
+            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (p.distanceKm != null)
+                  Text('📍 ${p.distanceKm!.toStringAsFixed(1)} km',
+                      style: const TextStyle(fontSize: 12)),
+                Row(children: [
+                  const Icon(Icons.star, size: 14, color: Colors.amber),
+                  const SizedBox(width: 4),
+                  Text(p.rating.toStringAsFixed(1),
+                      style: const TextStyle(fontSize: 12)),
+                ]),
+              ],
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => widget.ctrl.selectProvider(p),
+          ),
+        );
+      },
     );
   }
 }
@@ -603,100 +586,75 @@ class _ConfirmStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final auth     = context.watch<AuthController>();
-    final estimate = ctrl.estimate;
-
-    if (ctrl.estimateLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (ctrl.error != null && estimate == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: AppColors.error, size: 48),
-              const SizedBox(height: 12),
-              Text(ctrl.error!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ctrl.refreshEstimate(auth.user),
-                child: const Text('Réessayer'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    final auth = context.watch<AuthController>();
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _Row('🛠️ Service',
-                    '${ctrl.selectedService?.emoji} ${ctrl.selectedService?.name}'),
-                const Divider(height: 20),
-                if (ctrl.isAuto)
-                  _Row('👨‍🔧 Prestataire',
-                      'Le mieux noté & le plus proche')
-                else ...[
-                  _Row('👨‍🔧 Prestataire',
-                      ctrl.selectedProvider?.name ?? '-'),
-                  _Row('📍 Distance',
-                      '${_estimateNum(estimate?['distance_km']).toStringAsFixed(1)} km'),
+          // ── Récap ──────────────────────────────────────────────────────
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Récapitulatif',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  const SizedBox(height: 12),
+                  _Row('Service', ctrl.selectedService?.name ?? '—'),
+                  if (ctrl.selectedProvider != null)
+                    _Row('Prestataire', ctrl.selectedProvider!.name),
+                  if (ctrl.isAuto)
+                    const _Row('Affectation', 'Automatique'),
+                  _Row('Position', ctrl.userAddress ?? 'Position GPS'),
+                  _Row('Paiement', _paymentLabel(ctrl.paymentMethod)),
+                  if (ctrl.estimateLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: LinearProgressIndicator(),
+                    )
+                  else if (ctrl.estimate != null) ...[
+                    const Divider(height: 20),
+                    if (_estimateNum(ctrl.estimate!['distance_km']) > 0)
+                      _Row('Distance',
+                          '${_estimateNum(ctrl.estimate!['distance_km']).toStringAsFixed(1)} km'),
+                    _Row('Prix de base',
+                        _fmt(_estimateNum(ctrl.estimate!['base_price']))),
+                    if (_estimateNum(ctrl.estimate!['km_cost']) > 0)
+                      _Row('Déplacement',
+                          _fmt(_estimateNum(ctrl.estimate!['km_cost']))),
+                    _Row(
+                      'Total estimé',
+                      _fmt(_estimateNum(ctrl.estimate!['total_price'])),
+                      bold: true,
+                      valueColor: AppColors.primary,
+                    ),
+                  ],
                 ],
-                const Divider(height: 20),
-                _Row('Prix de base',
-                    PriceCalculator.formatFcfa(
-                        _estimateNum(estimate?['base_price']))),
-                if (!ctrl.isAuto)
-                  _Row('Déplacement',
-                      PriceCalculator.formatFcfa(
-                          _estimateNum(estimate?['km_cost']))),
-                const Divider(height: 20),
-                _Row(ctrl.isAuto ? 'ESTIMÉ (à partir de)' : 'TOTAL',
-                    PriceCalculator.formatFcfa(
-                        _estimateNum(estimate?['total_price'])),
-                    bold: true,
-                    valueColor: AppColors.primary),
-              ],
+              ),
             ),
           ),
+          const SizedBox(height: 16),
 
-          const SizedBox(height: 24),
+          // ── Paiement ───────────────────────────────────────────────────
           const Text('Mode de paiement',
-              style: TextStyle(
-                  fontWeight: FontWeight.w600, fontSize: 15)),
-          const SizedBox(height: 12),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          const SizedBox(height: 8),
           _PaymentMethods(
             selected: ctrl.paymentMethod,
             onSelect: ctrl.setPaymentMethod,
           ),
+          const SizedBox(height: 16),
 
-          if (ctrl.error != null) ...[
-            const SizedBox(height: 16),
+          if (ctrl.submitError == SubmitError.generic) ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.errorLight,
-                borderRadius: BorderRadius.circular(8),
+                color: AppColors.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Text(ctrl.error!,
                   style: const TextStyle(color: AppColors.error)),
@@ -720,8 +678,9 @@ class _ConfirmStep extends StatelessWidget {
               if (ctrl.isAuto) {
                 // Mode auto : on ne navigue PAS vers tracking tout de suite.
                 // On attend 60s que le serveur dispatche et qu'un prestataire
-                // accepte (→ FCM order_accepted naviguera vers /user/tracking).
+                // accepte (→ FCM intervention_update naviguera vers /user/tracking).
                 // Si personne ne répond en 60s → popup "indisponible".
+                // FIX Bug A : le FCM no_provider/intervention_update est aussi écouté.
                 onSubmitted?.call(interventionId);
               } else {
                 // Mode manuel : le prestataire est déjà ciblé, on va au tracking.
@@ -744,6 +703,18 @@ class _ConfirmStep extends StatelessWidget {
       ),
     );
   }
+
+  String _fmt(double v) => '${v.toStringAsFixed(0).replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+$)'),
+        (m) => '${m[1]} ',
+      )} FCFA';
+
+  String _paymentLabel(String method) => switch (method) {
+        'cash'         => 'Espèces',
+        'orange_money' => 'Orange Money',
+        'wave'         => 'Wave',
+        _              => method,
+      };
 }
 
 class _Row extends StatelessWidget {
@@ -819,10 +790,7 @@ class _StepIndicator extends StatelessWidget {
 
 // ── Vue "Recherche prestataire en cours" ─────────────────────────────────────
 // Affichée après soumission en mode AUTO pendant max 60 secondes.
-// Si order_accepted arrive (FCM), NotificationRouterService navigue vers
-// /user/tracking et ce widget est retiré automatiquement.
-// Si le timeout s'écoule sans réponse, le callback onCancel est appelé et
-// un dialog "prestataires indisponibles" est affiché par le parent.
+// FIX Bug A : aussi réactif aux FCM intervention_update et no_provider.
 class _SearchingProviderView extends StatefulWidget {
   final VoidCallback onCancel;
   const _SearchingProviderView({required this.onCancel});

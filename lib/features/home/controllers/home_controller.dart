@@ -44,17 +44,16 @@ class HomeController extends ChangeNotifier {
   String?             _error;
   Timer?              _refreshTimer;
 
-  // FIX bug 1 : mémoriser la dernière position envoyée à checkAndNotify
-  // pour éviter de déclencher la détection de ville à chaque polling.
-  // On ne notifie le backend que si l'utilisateur s'est déplacé de plus
+  // Mémorise la dernière position envoyée au backend pour la détection de ville.
+  // La détection n'est déclenchée que si l'utilisateur s'est déplacé de plus
   // de _cityCheckThresholdKm depuis le dernier envoi.
   LatLng?  _lastCityCheckPosition;
   static const double _cityCheckThresholdKm = 5.0;
 
-  LatLng?                get userPosition        => _userPosition;
-  bool                   get locationApprox      => _locationApprox;
-  List<ProviderModel>    get providers           => _providers;
-  Set<Marker>            get markers             => _markers;
+  LatLng?                get userPosition          => _userPosition;
+  bool                   get locationApprox        => _locationApprox;
+  List<ProviderModel>    get providers             => _providers;
+  Set<Marker>            get markers               => _markers;
 
   // Recherche par nom (barre de recherche de la carte)
   String _search = '';
@@ -70,12 +69,13 @@ class HomeController extends ChangeNotifier {
     if (q.isEmpty) return _providers;
     return _providers.where((p) => p.name.toLowerCase().contains(q)).toList();
   }
-  String?                get serviceFilter       => _serviceFilter;
+
+  String?                get serviceFilter         => _serviceFilter;
   String?                get selectedServiceFilter => _serviceFilter;
-  bool                   get isLoading           => _isLoading;
-  String?                get error               => _error;
-  List<ServiceTypeModel> get serviceTypes        => _stService.serviceTypes;
-  bool                   get servicesLoading     => _stService.isLoading;
+  bool                   get isLoading             => _isLoading;
+  String?                get error                 => _error;
+  List<ServiceTypeModel> get serviceTypes          => _stService.serviceTypes;
+  bool                   get servicesLoading       => _stService.isLoading;
 
   /// Centre d'Abidjan — utilisé comme position de repli pour que la carte
   /// s'affiche même si le GPS est refusé / coupé / trop lent.
@@ -94,27 +94,20 @@ class HomeController extends ChangeNotifier {
         _userPosition   = LatLng(pos.latitude, pos.longitude);
         _locationApprox = false;
       } else {
-        // Repli : la carte doit toujours s'afficher.
         _userPosition   = _abidjan;
         _locationApprox = true;
       }
       _isLoading = false;
       notifyListeners();
 
-      // FIX bug 1 : premier chargement — toujours envoyer la position
-      // au backend pour la détection de ville (premier appel au démarrage).
+      // Premier chargement — déclenche la détection de ville côté backend.
       await _loadProviders(checkCity: true);
 
-      // FIX bug 1 : le timer de 30 s rafraîchit UNIQUEMENT les prestataires
-      // sur la carte (marqueurs, disponibilité). Il ne déclenche PAS la
-      // détection de ville à chaque tick — checkCity vaut false ici.
-      // La détection de ville se fait seulement si l'utilisateur s'est
-      // déplacé de plus de _cityCheckThresholdKm (voir _shouldCheckCity).
+      // Timer 30s : rafraîchit les prestataires uniquement.
+      // La détection de ville n'est pas relancée ici (checkCity: false).
       _refreshTimer ??=
           Timer.periodic(const Duration(seconds: 30), (_) => _loadProviders(checkCity: false));
     } catch (e) {
-      // Filet de sécurité : ne doit jamais laisser l'écran figé sur un
-      // spinner indéfiniment sans retour possible.
       debugPrint('[HomeController] initialize error: $e');
       _userPosition   = _abidjan;
       _locationApprox = true;
@@ -123,16 +116,15 @@ class HomeController extends ChangeNotifier {
     }
   }
 
-  /// Relance la détection GPS (bouton « ma position »). Retourne la nouvelle
-  /// position si obtenue, sinon null.
+  /// Relance la détection GPS (bouton « ma position »).
   Future<LatLng?> refreshLocation() async {
     final pos = await _location.getCurrentPosition();
     if (pos != null) {
       _userPosition   = LatLng(pos.latitude, pos.longitude);
       _locationApprox = false;
       notifyListeners();
-      // FIX bug 1 : un appui sur "ma position" peut signifier un vrai
-      // déplacement — on réévalue la ville si le seuil est franchi.
+      // Un appui sur "ma position" peut signifier un vrai déplacement
+      // → on réévalue la ville si le seuil est franchi.
       await _loadProviders(checkCity: true);
       return _userPosition;
     }
@@ -142,21 +134,19 @@ class HomeController extends ChangeNotifier {
   void setServiceFilter(String? id) {
     _serviceFilter = id;
     notifyListeners();
-    // Changement de filtre = pas un déplacement → pas de détection de ville
+    // Changement de filtre = pas un déplacement → pas de détection de ville.
     _loadProviders(checkCity: false);
   }
 
-  /// Calcule si l'utilisateur s'est suffisamment déplacé par rapport à la
-  /// dernière position envoyée au backend pour valoir une nouvelle détection
-  /// de ville. Utilise la formule de Haversine (distance en km).
+  /// Retourne true si l'utilisateur s'est déplacé de plus de
+  /// [_cityCheckThresholdKm] depuis le dernier envoi au backend.
   bool _shouldCheckCity(LatLng current) {
-    if (_lastCityCheckPosition == null) return true; // premier appel
+    if (_lastCityCheckPosition == null) return true;
     return _haversineKm(_lastCityCheckPosition!, current) >= _cityCheckThresholdKm;
   }
 
-  /// Distance Haversine entre deux coordonnées, en kilomètres.
   double _haversineKm(LatLng a, LatLng b) {
-    const r = 6371.0; // rayon terrestre moyen en km
+    const r = 6371.0;
     final dLat = _deg2rad(b.latitude  - a.latitude);
     final dLng = _deg2rad(b.longitude - a.longitude);
     final h = sin(dLat / 2) * sin(dLat / 2)
@@ -171,13 +161,12 @@ class HomeController extends ChangeNotifier {
   Future<void> _loadProviders({required bool checkCity}) async {
     if (_userPosition == null) return;
 
-    // FIX bug 1 : on décide ICI si on doit déclencher checkAndNotify.
-    // - checkCity == true  : l'appelant veut explicitement une vérification
-    //   (démarrage, appui "ma position") — on vérifie quand même le seuil
-    //   pour éviter un double-envoi si refreshLocation() est appelé deux fois
-    //   rapidement.
-    // - checkCity == false : appel périodique ou changement de filtre — on
-    //   ne vérifie jamais la ville, quel que soit le déplacement.
+    // On décide ici si on doit déclencher checkAndNotify côté backend :
+    // - checkCity == true  : démarrage ou appui "ma position" — on vérifie
+    //   quand même le seuil pour éviter un double-envoi si refreshLocation()
+    //   est appelé deux fois rapidement.
+    // - checkCity == false : appel périodique ou changement de filtre —
+    //   jamais de détection de ville.
     final doCheckCity = checkCity && _shouldCheckCity(_userPosition!);
 
     try {
@@ -185,10 +174,6 @@ class HomeController extends ChangeNotifier {
         latitude:      _userPosition!.latitude,
         longitude:     _userPosition!.longitude,
         serviceTypeId: _serviceFilter,
-        // FIX bug 1 : on passe un flag au service API qui décide d'inclure
-        // ou non le paramètre skip_city_check dans la requête.
-        // Quand doCheckCity == false, on indique au backend de ne PAS
-        // appeler checkAndNotify, évitant ainsi l'envoi répété de la notif.
         skipCityCheck: !doCheckCity,
       );
       _providers = data.map((e) => ProviderModel.fromJson(e as Map<String, dynamic>)).toList();
@@ -218,9 +203,9 @@ class HomeController extends ChangeNotifier {
     if (_userPosition != null) {
       final icon = await _getCachedIcon('__client__', null);
       markers.add(Marker(
-        markerId:  const MarkerId('__client__'),
-        position:  _userPosition!,
-        icon:      icon,
+        markerId:   const MarkerId('__client__'),
+        position:   _userPosition!,
+        icon:       icon,
         infoWindow: const InfoWindow(title: '📍 Votre position'),
         zIndexInt:  2,
       ));
@@ -231,9 +216,9 @@ class HomeController extends ChangeNotifier {
       final icon = await _getCachedIcon(p.id, slug);
       final dist = p.distanceKm != null ? ' · ${p.distanceKm!.toStringAsFixed(1)} km' : '';
       markers.add(Marker(
-        markerId:  MarkerId(p.id),
-        position:  LatLng(p.latitude, p.longitude),
-        icon:      icon,
+        markerId:   MarkerId(p.id),
+        position:   LatLng(p.latitude, p.longitude),
+        icon:       icon,
         infoWindow: InfoWindow(title: '🟢 ${p.name}', snippet: '${p.rating.toStringAsFixed(1)}★$dist'),
       ));
     }
@@ -246,7 +231,9 @@ class HomeController extends ChangeNotifier {
 
   Future<BitmapDescriptor> _getCachedIcon(String id, String? slug) async {
     if (_iconCache.containsKey(id)) return _iconCache[id]!;
-    final icon = id == '__client__' ? await _buildClientMarker() : await _buildProviderMarker(slug ?? 'other');
+    final icon = id == '__client__'
+        ? await _buildClientMarker()
+        : await _buildProviderMarker(slug ?? 'other');
     _iconCache[id] = icon;
     return icon;
   }

@@ -14,7 +14,6 @@ class CtBookingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // FIX : charge les centres en même temps que l'on passe à l'étape 2
   void goToStep2() {
     setStep(2);
     loadCenters();
@@ -22,7 +21,17 @@ class CtBookingController extends ChangeNotifier {
 
   void goToStep3() => setStep(3);
   void goToStep4() => setStep(4);
-  void goBack() => setStep(_step - 1);
+
+  // FIX Bug D : goBack() ne décrémente plus en dessous de 1.
+  // Au step 1, la navigation hors de l'écran est gérée par PopScope
+  // dans ct_booking_flow_screen.dart → cette méthode ne sera jamais
+  // appelée depuis le step 1 (le bouton "Retour" n'existe pas à ce step).
+  void goBack() {
+    // Si on revient du Step 5 (paiement en cours), arrêter le polling
+    if (_step == 5) _stopPolling();
+    // FIX Bug D : sécurité — ne jamais descendre sous 1
+    if (_step > 1) setStep(_step - 1);
+  }
 
   // ── Loading / Error ───────────────────────────────────────────────────────
   bool _isLoading = false;
@@ -58,22 +67,18 @@ class CtBookingController extends ChangeNotifier {
 
   void selectCenter(TechnicalCenterModel c) {
     _selectedCenter = c;
-    _selectedSlot = null; // reset le slot quand on change de centre
-    // FIX : déplacer la caméra vers le centre sélectionné
+    _selectedSlot = null;
     if (c.latitude != null && c.longitude != null) {
       _mapController?.animateCamera(
         CameraUpdate.newLatLngZoom(LatLng(c.latitude!, c.longitude!), 14),
       );
     }
     notifyListeners();
-    // FIX BOUTON CONTINUER : charger les slots pour la date déjà sélectionnée
-    // dès qu'on choisit un centre (sans attendre un changement de date).
     if (_selectedDate != null) {
       final dateStr =
           '${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}';
       loadSlots(dateStr);
     } else {
-      // Pas de date choisie → charger les slots pour aujourd'hui par défaut
       final now = DateTime.now();
       final dateStr =
           '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
@@ -100,7 +105,8 @@ class CtBookingController extends ChangeNotifier {
   void selectDate(DateTime d) {
     _selectedDate = d;
     notifyListeners();
-    final dateStr = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final dateStr =
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     loadCenters(date: dateStr);
     loadSlots(dateStr);
   }
@@ -125,18 +131,42 @@ class CtBookingController extends ChangeNotifier {
 
   bool get canProceedStep3 => _transportMode != 'driver' || _keyHandoverAccepted;
 
+  // ── Phone (Wave / Orange Money / MTN) ────────────────────────────────────
+  String? _phone;
+  String? get phone => _phone;
+
+  void setPhone(String v) {
+    _phone = v.trim().isEmpty ? null : v.trim();
+    notifyListeners();
+  }
+
+  /// Modes qui nécessitent un numéro de téléphone
+  bool get requiresPhone =>
+      _paymentMethod == 'wave' ||
+      _paymentMethod == 'orange_money' ||
+      _paymentMethod == 'mtn_money';
+
+  /// Le bouton "Payer" est actif quand :
+  ///  - un mode de paiement est sélectionné
+  ///  - si ce mode exige un téléphone, le champ est rempli
+  bool get canPay =>
+      _paymentMethod != null && (!requiresPhone || (_phone != null && _phone!.length >= 8));
+
   // ── Fees ──────────────────────────────────────────────────────────────────
   double get towFee => 5000;
   double get driverFee => 8000;
 
-  double get bookingFee =>
-      _activeBooking?.bookingFee ?? 15000;
+  double get bookingFee => _activeBooking?.bookingFee ?? 15000;
 
   double get transportFee =>
-      _activeBooking?.transportFee ?? (_transportMode == 'tow' ? towFee : _transportMode == 'driver' ? driverFee : 0);
+      _activeBooking?.transportFee ??
+      (_transportMode == 'tow'
+          ? towFee
+          : _transportMode == 'driver'
+              ? driverFee
+              : 0);
 
-  double get totalAmount =>
-      _activeBooking?.totalAmount ?? (bookingFee + transportFee);
+  double get totalAmount => _activeBooking?.totalAmount ?? (bookingFee + transportFee);
 
   // ── Payment ───────────────────────────────────────────────────────────────
   String? _paymentMethod;
@@ -144,23 +174,27 @@ class CtBookingController extends ChangeNotifier {
 
   void setPaymentMethod(String v) {
     _paymentMethod = v;
+    // Réinitialiser le téléphone si on bascule vers carte (pas besoin de tél)
+    if (v == 'card') _phone = null;
     notifyListeners();
   }
 
   String? _paymentUrl;
   String? get paymentUrl => _paymentUrl;
 
-  // FIX Bug 2 : on stocke le token QR local (présent dans CtBookingModel)
-  // plutôt qu'une URL authentifiée que Image.network ne peut pas charger.
   String? _qrToken;
   String? get qrToken => _qrToken;
 
-  /// Conservé pour rétro-compatibilité dans les écrans qui l'utilisent encore.
-  String? get qrCodeUrl => null; // plus utilisé — voir qrToken
+  /// Conservé pour rétro-compatibilité.
+  String? get qrCodeUrl => null;
 
   // ── Active booking ────────────────────────────────────────────────────────
   CtBookingModel? _activeBooking;
   CtBookingModel? get activeBooking => _activeBooking;
+
+  // ── Payment confirmed (après polling) ────────────────────────────────────
+  bool _paymentConfirmed = false;
+  bool get paymentConfirmed => _paymentConfirmed;
 
   // ── Reservation countdown ─────────────────────────────────────────────────
   int _reservationSecondsLeft = 0;
@@ -180,11 +214,51 @@ class CtBookingController extends ChangeNotifier {
       if (_reservationSecondsLeft <= 0) {
         _reservationSecondsLeft = 0;
         timer.cancel();
+        _stopPolling();
         setStep(1);
       } else {
         notifyListeners();
       }
     });
+  }
+
+  // ── Polling (vérifie la confirmation du paiement) ─────────────────────────
+  Timer? _pollingTimer;
+  bool _isPolling = false;
+  bool get isPolling => _isPolling;
+
+  /// Lance le polling toutes les 5 secondes jusqu'à confirmation ou expiration.
+  void startPolling() {
+    if (_activeBooking == null || _isPolling) return;
+    _isPolling = true;
+    notifyListeners();
+
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      await _checkPaymentStatus();
+    });
+  }
+
+  void _stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+    _isPolling = false;
+    notifyListeners();
+  }
+
+  Future<void> _checkPaymentStatus() async {
+    if (_activeBooking == null) return;
+    try {
+      final booking = await CtService.instance.getBooking(_activeBooking!.id);
+      if (booking.paymentStatus == 'paid' || booking.status == 'confirmed') {
+        _paymentConfirmed = true;
+        _qrToken = booking.qrToken ?? _qrToken;
+        _activeBooking = booking;
+        _stopPolling();
+        notifyListeners();
+      }
+    } catch (_) {
+      // Silencieux — on réessaie au prochain tick
+    }
   }
 
   // ── Map ───────────────────────────────────────────────────────────────────
@@ -195,8 +269,6 @@ class CtBookingController extends ChangeNotifier {
 
   void onMapCreated(GoogleMapController c) {
     _mapController = c;
-    // FIX : si des centres sont déjà chargés quand la carte s'initialise,
-    // zoomer immédiatement sur leur barycentre
     if (_centers.isNotEmpty) {
       _animateToCenters();
     }
@@ -217,7 +289,6 @@ class CtBookingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Anime la caméra pour afficher tous les centres chargés.
   void _animateToCenters() {
     final withCoords = _centers
         .where((c) => c.latitude != null && c.longitude != null)
@@ -234,7 +305,6 @@ class CtBookingController extends ChangeNotifier {
       return;
     }
 
-    // Calculer le LatLngBounds englobant tous les centres
     double minLat = withCoords.first.latitude!;
     double maxLat = withCoords.first.latitude!;
     double minLng = withCoords.first.longitude!;
@@ -253,7 +323,7 @@ class CtBookingController extends ChangeNotifier {
           southwest: LatLng(minLat, minLng),
           northeast: LatLng(maxLat, maxLng),
         ),
-        60, // padding in pixels
+        60,
       ),
     );
   }
@@ -284,7 +354,6 @@ class CtBookingController extends ChangeNotifier {
         lng: lng,
       );
       _buildMapMarkers();
-      // FIX : déplacer la caméra vers les centres chargés
       _animateToCenters();
     } catch (e) {
       _error = e.toString();
@@ -300,7 +369,8 @@ class CtBookingController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      _slots = await CtService.instance.getAvailableSlots(_selectedCenter!.id, date);
+      _slots = await CtService.instance.getAvailableSlots(
+          _selectedCenter!.id, date);
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -313,7 +383,7 @@ class CtBookingController extends ChangeNotifier {
     if (_selectedVehicle == null ||
         _selectedCenter == null ||
         _selectedSlot == null) {
-      _error = 'Please complete all selections.';
+      _error = 'Veuillez compléter toutes les sélections.';
       notifyListeners();
       return false;
     }
@@ -347,18 +417,13 @@ class CtBookingController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      // FIX Bug 2a : on passe maintenant payment_method dans le body.
       final result = await CtService.instance.initiatePayment(
         _activeBooking!.id,
         paymentMethod: _paymentMethod!,
+        phone: _phone, // null pour carte bancaire
       );
       _paymentUrl = result['payment_url'] as String?;
-
-      // FIX Bug 2b : on utilise le qrToken du booking (déjà dans le modèle)
-      // pour générer le QR localement avec qr_flutter — pas besoin d'URL auth.
-      // Le backend peut aussi renvoyer un token dans la réponse de pay().
       _qrToken = (result['qr_token'] as String?) ?? _activeBooking!.qrToken;
-
       return true;
     } catch (e) {
       _error = e.toString();
@@ -372,6 +437,7 @@ class CtBookingController extends ChangeNotifier {
   // ── Reset ─────────────────────────────────────────────────────────────────
   void reset() {
     _countdownTimer?.cancel();
+    _stopPolling();
     _step = 1;
     _isLoading = false;
     _error = null;
@@ -384,10 +450,12 @@ class CtBookingController extends ChangeNotifier {
     _selectedDate = null;
     _transportMode = 'self';
     _keyHandoverAccepted = false;
+    _phone = null;
     _paymentMethod = null;
     _paymentUrl = null;
     _qrToken = null;
     _activeBooking = null;
+    _paymentConfirmed = false;
     _reservationSecondsLeft = 0;
     _mapMarkers = {};
     _mapController = null;
@@ -397,6 +465,7 @@ class CtBookingController extends ChangeNotifier {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _stopPolling();
     _mapController?.dispose();
     super.dispose();
   }

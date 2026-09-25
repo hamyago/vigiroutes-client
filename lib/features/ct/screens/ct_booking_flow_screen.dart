@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -43,18 +45,38 @@ class _CtBookingFlowScreenState extends State<CtBookingFlowScreen> {
   @override
   Widget build(BuildContext context) {
     final ctrl = context.watch<CtBookingController>();
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          _StepIndicator(currentStep: ctrl.step),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: _buildStep(ctrl),
+
+    // FIX Bug D : PopScope intercepte le geste "retour" de l'OS.
+    //
+    // - Au step 1 (sélection du véhicule), il n'y a pas de bouton "Retour"
+    //   dans l'UI → canPop: true laisse Flutter gérer normalement (context.pop).
+    //   Avant ce fix, goBack() était appelé, décrémentait _step à 0, et
+    //   déclenchait un état invalide + une requête 404.
+    //
+    // - Aux steps 2-5, canPop: false intercepte le geste → onPopInvokedWithResult
+    //   appelle ctrl.goBack() qui revient au step précédent.
+    return PopScope(
+      canPop: ctrl.step == 1,
+      onPopInvokedWithResult: (didPop, _) {
+        // didPop == true  → l'OS a déjà sorti l'écran (step 1, canPop: true)
+        // didPop == false → on intercepte : on recule d'un step
+        if (!didPop && ctrl.step > 1) {
+          ctrl.goBack();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Column(
+          children: [
+            _StepIndicator(currentStep: ctrl.step),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: _buildStep(ctrl),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -157,8 +179,6 @@ class _Step1VehicleSelection extends StatelessWidget {
                 },
               ),
             ),
-          // FIX : SafeArea bottom pour éviter que le bouton soit coupé
-          // par la barre de navigation système
           Padding(
             padding: EdgeInsets.fromLTRB(
               16,
@@ -192,9 +212,6 @@ class _Step1VehicleSelection extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 2 — Center & Slot
-// FIX 1: initialCameraPosition → Abidjan (5.3599, -4.0083)
-// FIX 2: date par défaut = aujourd'hui, chargée dès l'arrivée à cette étape
-// FIX 3: SafeArea bottom pour les boutons
 // ─────────────────────────────────────────────────────────────────────────────
 class _Step2CenterAndSlot extends StatefulWidget {
   final CtBookingController ctrl;
@@ -223,7 +240,6 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
 
     return Column(
       children: [
-        // Carte — coordonnées Abidjan
         SizedBox(
           height: 200,
           child: GoogleMap(
@@ -235,7 +251,6 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
             ),
           ),
         ),
-        // Sélecteur de date
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -268,7 +283,6 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
           ),
         ),
         Divider(color: AppColors.divider, height: 1),
-        // Liste des centres
         if (ctrl.isLoading)
           const Expanded(
             child: Center(child: CircularProgressIndicator()),
@@ -287,7 +301,6 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 12),
-                  // FIX : bouton pour essayer une autre date plutôt que rester bloqué
                   OutlinedButton.icon(
                     onPressed: () async {
                       final picked = await showDatePicker(
@@ -324,8 +337,9 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
                         center.name,
                         style: TextStyle(
                           color: AppColors.textPrimary,
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                       subtitle: Text(
@@ -386,7 +400,6 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
               },
             ),
           ),
-        // FIX : boutons avec padding bottom adapté à la barre système
         Padding(
           padding: EdgeInsets.fromLTRB(16, 8, 16, bottomPad + 12),
           child: Row(
@@ -394,7 +407,8 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
               OutlinedButton(
                 onPressed: () => ctrl.goBack(),
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 ),
                 child: const Text('Retour'),
               ),
@@ -413,8 +427,7 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
                   ),
                   child: const Text(
                     'Continuer',
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -428,7 +441,6 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 3 — Transport Mode
-// FIX : SafeArea bottom pour les boutons
 // ─────────────────────────────────────────────────────────────────────────────
 class _Step3TransportMode extends StatelessWidget {
   final CtBookingController ctrl;
@@ -499,7 +511,6 @@ class _Step3TransportMode extends StatelessWidget {
           ),
         ],
         const Spacer(),
-        // FIX : padding bottom adapté à la barre système
         Padding(
           padding: EdgeInsets.fromLTRB(16, 8, 16, bottomPad + 12),
           child: Row(
@@ -507,7 +518,8 @@ class _Step3TransportMode extends StatelessWidget {
               OutlinedButton(
                 onPressed: () => ctrl.goBack(),
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 ),
                 child: const Text('Retour'),
               ),
@@ -549,16 +561,37 @@ class _Step3TransportMode extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 4 — Summary
+// Step 4 — Summary + Mode de paiement + Numéro de téléphone
 // ─────────────────────────────────────────────────────────────────────────────
-class _Step4Summary extends StatelessWidget {
+class _Step4Summary extends StatefulWidget {
   final CtBookingController ctrl;
   const _Step4Summary({required this.ctrl});
 
   @override
+  State<_Step4Summary> createState() => _Step4SummaryState();
+}
+
+class _Step4SummaryState extends State<_Step4Summary> {
+  final _phoneCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneCtrl.text = widget.ctrl.phone ?? '';
+  }
+
+  @override
+  void dispose() {
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final ctrl = widget.ctrl;
     final fmt = NumberFormat('#,##0', 'fr');
     final bottomPad = MediaQuery.of(context).padding.bottom;
+
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(16, 16, 16, bottomPad + 16),
       child: Column(
@@ -662,29 +695,90 @@ class _Step4Summary extends StatelessWidget {
             onSelect: ctrl.setPaymentMethod,
           ),
           _PaymentMethod(
+            value: 'mtn_money',
+            label: 'MTN Money',
+            icon: Icons.phone_android,
+            selected: ctrl.paymentMethod,
+            onSelect: ctrl.setPaymentMethod,
+          ),
+          _PaymentMethod(
             value: 'card',
             label: 'Carte bancaire',
             icon: Icons.credit_card,
             selected: ctrl.paymentMethod,
             onSelect: ctrl.setPaymentMethod,
           ),
+
+          // ── Champ téléphone (Wave / Orange Money / MTN) ──────────────────
+          if (ctrl.requiresPhone) ...[
+            const SizedBox(height: 20),
+            Text(
+              'Numéro de téléphone',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _phoneCtrl,
+              keyboardType: TextInputType.phone,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              maxLength: 15,
+              onChanged: ctrl.setPhone,
+              decoration: InputDecoration(
+                hintText: 'Ex : 0707000000',
+                hintStyle: TextStyle(color: AppColors.textSecondary),
+                prefixIcon: const Icon(Icons.phone),
+                counterText: '',
+                filled: true,
+                fillColor: AppColors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppColors.divider),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppColors.primary, width: 2),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppColors.divider),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Le paiement sera initié sur ce numéro.',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+
           const SizedBox(height: 24),
           Row(
             children: [
               OutlinedButton(
                 onPressed: () => ctrl.goBack(),
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 ),
                 child: const Text('Retour'),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: ctrl.paymentMethod != null
+                  onPressed: ctrl.canPay
                       ? () async {
                           final ok = await ctrl.pay();
-                          if (ok) ctrl.setStep(5);
+                          if (ok) {
+                            ctrl.setStep(5);
+                            ctrl.startPolling();
+                          }
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
@@ -716,9 +810,7 @@ class _Step4Summary extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 5 — Payment
-// FIX bug 2 : le bouton "Ouvrir la page de paiement" avait un onPressed vide.
-// On utilise url_launcher pour ouvrir paymentUrl dans le navigateur externe.
+// Step 5 — Payment (polling + QR après confirmation)
 // ─────────────────────────────────────────────────────────────────────────────
 class _Step5Payment extends StatelessWidget {
   final CtBookingController ctrl;
@@ -747,70 +839,149 @@ class _Step5Payment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ── Paiement confirmé → afficher le QR code ───────────────────────────
+    if (ctrl.paymentConfirmed && ctrl.qrToken != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle_rounded,
+                  color: Colors.green.shade600, size: 56),
+              const SizedBox(height: 12),
+              Text(
+                'Paiement confirmé !',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Présentez ce QR code à l\'entrée du centre.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: QrImageView(
+                  data: ctrl.qrToken!,
+                  version: QrVersions.auto,
+                  size: 220,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: Colors.black,
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              TextButton(
+                onPressed: ctrl.reset,
+                child: const Text('Nouvelle réservation'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ── En attente de confirmation (polling actif) ────────────────────────
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // FIX Bug 2 : on utilise QrImageView (qr_flutter) avec le token local
-          // du booking. Image.network ne peut pas charger une URL qui exige
-          // un Bearer token — le widget QrImageView génère le QR en local.
-          if (ctrl.qrToken != null) ...[
+            // Timer de réservation
+            _SlotReservationTimer(secondsLeft: ctrl.reservationSecondsLeft),
+            const SizedBox(height: 32),
+
+            // Bouton ouvrir page de paiement (si payment_url disponible)
+            if (ctrl.paymentUrl != null) ...[
               Text(
-                'Scannez le QR code pour payer',
+                'Finaliser votre paiement',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 16),
-              QrImageView(
-                data: ctrl.qrToken!,
-                version: QrVersions.auto,
-                size: 200,
-                eyeStyle: const QrEyeStyle(
-                  eyeShape: QrEyeShape.square,
-                  color: Colors.black,
-                ),
-                dataModuleStyle: const QrDataModuleStyle(
-                  dataModuleShape: QrDataModuleShape.square,
-                  color: Colors.black,
-                ),
-              ),
-            ] else if (ctrl.paymentUrl != null) ...[
+              const SizedBox(height: 8),
               Text(
-                'Finaliser le paiement',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
+                'Complétez le paiement sur votre téléphone,\npuis revenez ici.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               ElevatedButton.icon(
-                // FIX bug 2 : onPressed était vide. On ouvre maintenant
-                // paymentUrl dans le navigateur système via url_launcher.
                 onPressed: () => _openPaymentUrl(context, ctrl.paymentUrl!),
                 icon: const Icon(Icons.open_in_browser),
                 label: const Text('Ouvrir la page de paiement'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24, vertical: 14),
+                ),
+              ),
+              const SizedBox(height: 32),
+            ],
+
+            // Indicateur de polling
+            if (ctrl.isPolling) ...[
+              const SizedBox(
+                height: 36,
+                width: 36,
+                child: CircularProgressIndicator(strokeWidth: 3),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Vérification du paiement en cours…',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Cette page se met à jour automatiquement.',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
                 ),
               ),
             ] else ...[
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
+              Icon(Icons.hourglass_bottom,
+                  size: 36, color: AppColors.textSecondary),
+              const SizedBox(height: 14),
               Text(
-                'Traitement en cours…',
+                'En attente de confirmation…',
                 style: TextStyle(color: AppColors.textSecondary),
               ),
             ],
+
             const SizedBox(height: 24),
-            _SlotReservationTimer(secondsLeft: ctrl.reservationSecondsLeft),
+            TextButton(
+              onPressed: () => ctrl.goBack(),
+              child: const Text('Retour'),
+            ),
           ],
         ),
       ),
@@ -855,8 +1026,7 @@ class _SlotReservationTimer extends StatelessWidget {
           Text(
             'Créneau réservé pour : $display',
             style: TextStyle(
-              color:
-                  isUrgent ? Colors.red.shade700 : Colors.orange.shade700,
+              color: isUrgent ? Colors.red.shade700 : Colors.orange.shade700,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -908,7 +1078,8 @@ class _TransportOption extends StatelessWidget {
         child: Row(
           children: [
             Icon(icon,
-                color: isSelected ? AppColors.primary : AppColors.textSecondary),
+                color:
+                    isSelected ? AppColors.primary : AppColors.textSecondary),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -923,8 +1094,8 @@ class _TransportOption extends StatelessWidget {
                   ),
                   Text(
                     description,
-                    style:
-                        TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: TextStyle(
+                        color: AppColors.textSecondary, fontSize: 12),
                   ),
                 ],
               ),
@@ -985,7 +1156,8 @@ class _PaymentMethod extends StatelessWidget {
         child: Row(
           children: [
             Icon(icon,
-                color: isSelected ? AppColors.primary : AppColors.textSecondary),
+                color:
+                    isSelected ? AppColors.primary : AppColors.textSecondary),
             const SizedBox(width: 12),
             Text(
               label,

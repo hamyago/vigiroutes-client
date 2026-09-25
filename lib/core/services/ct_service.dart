@@ -13,7 +13,6 @@ class CtService {
 
   Future<List<VehicleModel>> getVehicles() async {
     final res = await _api.get('/ct/vehicles');
-    // FIX : défense contre data null ou format inattendu
     final raw = res.data;
     final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
     if (list == null) return [];
@@ -49,7 +48,6 @@ class CtService {
       if (lat != null) 'lat': lat,
       if (lng != null) 'lng': lng,
     });
-    // FIX : défense contre data null ou format inattendu
     final raw = res.data;
     final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
     if (list == null) return [];
@@ -65,7 +63,6 @@ class CtService {
       '/ct/centers/$centerId/slots',
       params: {'date': date},
     );
-    // FIX : défense contre data null
     final raw = res.data;
     final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
     if (list == null) return [];
@@ -90,21 +87,27 @@ class CtService {
     return CtBookingModel.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
-  // FIX Bug 2 : payment_method est maintenant obligatoire et envoyé dans le body.
+  /// Lance le paiement DigitalPaye.
+  ///
+  /// [phone] est obligatoire pour Wave, Orange Money et MTN Money.
+  /// Il est ignoré pour la carte bancaire.
   Future<Map<String, dynamic>> initiatePayment(
     String bookingId, {
     required String paymentMethod,
+    String? phone,
   }) async {
     final res = await _api.post(
       '/ct/bookings/$bookingId/pay',
-      data: {'payment_method': paymentMethod},
+      data: {
+        'payment_method': paymentMethod,
+        if (phone != null && phone.isNotEmpty) 'phone': phone,
+      },
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
 
   Future<List<CtBookingModel>> getMyBookings() async {
     final res = await _api.get('/ct/bookings');
-    // FIX : défense contre data null
     final raw = res.data;
     final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
     if (list == null) return [];
