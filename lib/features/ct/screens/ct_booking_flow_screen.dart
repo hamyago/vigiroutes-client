@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-// FIX bug 2 : url_launcher est nécessaire pour ouvrir la page de paiement
-// dans le navigateur. Ajouter dans pubspec.yaml :
-//   url_launcher: ^6.3.1
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../controllers/ct_booking_controller.dart';
 import '../../../core/constants/app_colors.dart';
@@ -755,7 +753,10 @@ class _Step5Payment extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (ctrl.qrCodeUrl != null) ...[
+            // FIX Bug 2 : on utilise QrImageView (qr_flutter) avec le token local
+          // du booking. Image.network ne peut pas charger une URL qui exige
+          // un Bearer token — le widget QrImageView génère le QR en local.
+          if (ctrl.qrToken != null) ...[
               Text(
                 'Scannez le QR code pour payer',
                 style: TextStyle(
@@ -765,7 +766,19 @@ class _Step5Payment extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              Image.network(ctrl.qrCodeUrl!, height: 200, width: 200),
+              QrImageView(
+                data: ctrl.qrToken!,
+                version: QrVersions.auto,
+                size: 200,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: Colors.black,
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: Colors.black,
+                ),
+              ),
             ] else if (ctrl.paymentUrl != null) ...[
               Text(
                 'Finaliser le paiement',

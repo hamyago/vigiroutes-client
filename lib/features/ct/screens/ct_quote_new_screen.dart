@@ -54,16 +54,22 @@ class _CtQuoteNewScreenState extends State<CtQuoteNewScreen> {
 
   Future<void> _loadVehicles() async {
     try {
-      final res = await ApiService.instance.get('/vehicles');
-      final data = res.data['data'] as List<dynamic>;
+      // FIX Bug 1 : le bon endpoint est /user/vehicles.
+      // On délègue à ApiService.getVehicles() qui gère les deux formats
+      // de réponse (data[] ou vehicles[]) et est null-safe.
+      final raw = await ApiService.instance.getVehicles();
+      final list = raw
+          .whereType<Map<String, dynamic>>()
+          .map(VehicleModel.fromJson)
+          .toList();
+      if (!mounted) return;
       setState(() {
-        _vehicles = data
-            .map((e) => VehicleModel.fromJson(e as Map<String, dynamic>))
-            .toList();
+        _vehicles = list;
         _loadingVehicles = false;
         if (_vehicles.length == 1) _selectedVehicle = _vehicles.first;
       });
-    } catch (_) {
+    } catch (e) {
+      if (!mounted) return;
       setState(() => _loadingVehicles = false);
     }
   }

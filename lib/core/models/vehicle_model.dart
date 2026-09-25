@@ -318,6 +318,7 @@ class CtBookingModel {
   final double transportFee;
   final double totalAmount;
   final String paymentStatus;
+  final String? paymentMethod;
   final DateTime? paidAt;
   final String? qrToken;
   final DateTime? qrExpiresAt;
@@ -341,6 +342,7 @@ class CtBookingModel {
     required this.transportFee,
     required this.totalAmount,
     required this.paymentStatus,
+    this.paymentMethod,
     this.paidAt,
     this.qrToken,
     this.qrExpiresAt,
@@ -366,27 +368,91 @@ class CtBookingModel {
   static DateTime? _dt(dynamic v) =>
       v == null ? null : DateTime.tryParse(v.toString());
 
-  factory CtBookingModel.fromJson(Map<String, dynamic> json) => CtBookingModel(
-        id:                  (json['id'] ?? '').toString(),
-        reference:           (json['reference'] ?? '').toString(),
-        vehicle:             VehicleModel.fromJson(json['vehicle'] as Map<String, dynamic>),
-        center:              TechnicalCenterModel.fromJson(json['center'] as Map<String, dynamic>),
-        slotStartsAt:        _dt(json['slot_starts_at']) ?? DateTime.now(),
-        slotReservedUntil:   _dt(json['slot_reserved_until']),
-        transportMode:       (json['transport_mode'] ?? 'self').toString(),
-        keyHandoverAccepted: json['key_handover_accepted'] == true || json['key_handover_accepted'] == 1,
-        bookingFee:          _dbl(json['booking_fee']),
-        transportFee:        _dbl(json['transport_fee']),
-        totalAmount:         _dbl(json['total_amount']),
-        paymentStatus:       (json['payment_status'] ?? 'pending').toString(),
-        paidAt:              _dt(json['paid_at']),
-        qrToken:             json['qr_token']?.toString(),
-        qrExpiresAt:         _dt(json['qr_expires_at']),
-        status:              (json['status'] ?? 'pending').toString(),
-        vtResult:            json['vt_result']?.toString(),
-        vtReportNotes:       json['vt_report_notes']?.toString(),
-        vtCompletedAt:       _dt(json['vt_completed_at']),
-        nextVtDueDate:       _dt(json['next_vt_due_date']),
-        createdAt:           _dt(json['created_at']) ?? DateTime.now(),
+  // FIX CRITIQUE : le backend (formatBooking) retourne les champs à plat :
+  //   vehicle_brand, vehicle_model, registration_number, vehicle_color,
+  //   vehicle_category, center_id, center_name, center_address,
+  //   session_date, slot_starts_at.
+  // On accepte les DEUX formats : objet imbriqué (vehicle{}, center{})
+  // ET colonnes à plat — pour rester compatible quelle que soit l'évolution
+  // de l'API.
+  factory CtBookingModel.fromJson(Map<String, dynamic> json) {
+    // ── Véhicule ──────────────────────────────────────────────────────────
+    final VehicleModel vehicle;
+    if (json['vehicle'] is Map) {
+      // Format imbriqué : {"vehicle": {"id": ..., "brand": ...}}
+      vehicle = VehicleModel.fromJson(json['vehicle'] as Map<String, dynamic>);
+    } else {
+      // Format plat renvoyé par formatBooking/bookingSelectColumns
+      vehicle = VehicleModel(
+        id:                 (json['vehicle_id'] ?? json['id'] ?? '').toString(),
+        userId:             '',
+        registrationNumber: (json['registration_number'] ?? '').toString(),
+        brand:              (json['vehicle_brand'] ?? '').toString(),
+        model:              (json['vehicle_model'] ?? '').toString(),
+        color:              json['vehicle_color']?.toString(),
+        category:           (json['vehicle_category'] ?? 'VP').toString(),
+        createdAt:          DateTime.now(),
       );
+    }
+
+    // ── Centre ────────────────────────────────────────────────────────────
+    final TechnicalCenterModel center;
+    if (json['center'] is Map) {
+      // Format imbriqué : {"center": {"id": ..., "name": ...}}
+      center = TechnicalCenterModel.fromJson(json['center'] as Map<String, dynamic>);
+    } else {
+      // Format plat renvoyé par formatBooking/bookingSelectColumns
+      center = TechnicalCenterModel(
+        id:           (json['center_id'] ?? '').toString(),
+        operatorId:   '',
+        operatorName: '',
+        name:         (json['center_name'] ?? '').toString(),
+        type:         'fixed',
+        address:      json['center_address']?.toString(),
+        city:         (json['center_city'] ?? 'Abidjan').toString(),
+        openingTime:  '07:00',
+        closingTime:  '17:00',
+        dailyCapacity: 20,
+        isActive:     true,
+      );
+    }
+
+    // ── Date du créneau ───────────────────────────────────────────────────
+    // Le backend peut renvoyer slot_starts_at (datetime) ou
+    // session_date + slot_starts_at (time séparé).
+    DateTime slotStartsAt = DateTime.now();
+    if (json['slot_starts_at'] != null) {
+      slotStartsAt = _dt(json['slot_starts_at']) ?? DateTime.now();
+    } else if (json['session_date'] != null) {
+      // Reconstituer depuis session_date "2025-03-15" + start_time "08:00"
+      final datePart = json['session_date'].toString();
+      final timePart = (json['start_time'] ?? json['slot_time'] ?? '00:00').toString();
+      slotStartsAt = _dt('${datePart}T$timePart:00') ?? DateTime.now();
+    }
+
+    return CtBookingModel(
+      id:                  (json['id'] ?? '').toString(),
+      reference:           (json['reference'] ?? '').toString(),
+      vehicle:             vehicle,
+      center:              center,
+      slotStartsAt:        slotStartsAt,
+      slotReservedUntil:   _dt(json['slot_reserved_until']),
+      transportMode:       (json['transport_mode'] ?? 'self').toString(),
+      keyHandoverAccepted: json['key_handover_accepted'] == true || json['key_handover_accepted'] == 1,
+      bookingFee:          _dbl(json['booking_fee']),
+      transportFee:        _dbl(json['transport_fee']),
+      totalAmount:         _dbl(json['total_amount']),
+      paymentStatus:       (json['payment_status'] ?? 'pending').toString(),
+      paymentMethod:       json['payment_method']?.toString(),
+      paidAt:              _dt(json['paid_at']),
+      qrToken:             json['qr_token']?.toString(),
+      qrExpiresAt:         _dt(json['qr_expires_at']),
+      status:              (json['status'] ?? 'pending').toString(),
+      vtResult:            json['vt_result']?.toString(),
+      vtReportNotes:       json['vt_report_notes']?.toString(),
+      vtCompletedAt:       _dt(json['vt_completed_at']),
+      nextVtDueDate:       _dt(json['next_vt_due_date']),
+      createdAt:           _dt(json['created_at']) ?? DateTime.now(),
+    );
+  }
 }

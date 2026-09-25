@@ -90,8 +90,15 @@ class CtService {
     return CtBookingModel.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
-  Future<Map<String, dynamic>> initiatePayment(String bookingId) async {
-    final res = await _api.post('/ct/bookings/$bookingId/pay');
+  // FIX Bug 2 : payment_method est maintenant obligatoire et envoyé dans le body.
+  Future<Map<String, dynamic>> initiatePayment(
+    String bookingId, {
+    required String paymentMethod,
+  }) async {
+    final res = await _api.post(
+      '/ct/bookings/$bookingId/pay',
+      data: {'payment_method': paymentMethod},
+    );
     return Map<String, dynamic>.from(res.data as Map);
   }
 

@@ -150,8 +150,13 @@ class CtBookingController extends ChangeNotifier {
   String? _paymentUrl;
   String? get paymentUrl => _paymentUrl;
 
-  String? _qrCodeUrl;
-  String? get qrCodeUrl => _qrCodeUrl;
+  // FIX Bug 2 : on stocke le token QR local (présent dans CtBookingModel)
+  // plutôt qu'une URL authentifiée que Image.network ne peut pas charger.
+  String? _qrToken;
+  String? get qrToken => _qrToken;
+
+  /// Conservé pour rétro-compatibilité dans les écrans qui l'utilisent encore.
+  String? get qrCodeUrl => null; // plus utilisé — voir qrToken
 
   // ── Active booking ────────────────────────────────────────────────────────
   CtBookingModel? _activeBooking;
@@ -334,7 +339,7 @@ class CtBookingController extends ChangeNotifier {
 
   Future<bool> pay() async {
     if (_activeBooking == null || _paymentMethod == null) {
-      _error = 'No active booking or payment method selected.';
+      _error = 'Aucune réservation active ou mode de paiement non sélectionné.';
       notifyListeners();
       return false;
     }
@@ -342,9 +347,18 @@ class CtBookingController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      final result = await CtService.instance.initiatePayment(_activeBooking!.id);
+      // FIX Bug 2a : on passe maintenant payment_method dans le body.
+      final result = await CtService.instance.initiatePayment(
+        _activeBooking!.id,
+        paymentMethod: _paymentMethod!,
+      );
       _paymentUrl = result['payment_url'] as String?;
-      _qrCodeUrl = CtService.instance.qrCodeUrl(_activeBooking!.id);
+
+      // FIX Bug 2b : on utilise le qrToken du booking (déjà dans le modèle)
+      // pour générer le QR localement avec qr_flutter — pas besoin d'URL auth.
+      // Le backend peut aussi renvoyer un token dans la réponse de pay().
+      _qrToken = (result['qr_token'] as String?) ?? _activeBooking!.qrToken;
+
       return true;
     } catch (e) {
       _error = e.toString();
@@ -372,7 +386,7 @@ class CtBookingController extends ChangeNotifier {
     _keyHandoverAccepted = false;
     _paymentMethod = null;
     _paymentUrl = null;
-    _qrCodeUrl = null;
+    _qrToken = null;
     _activeBooking = null;
     _reservationSecondsLeft = 0;
     _mapMarkers = {};
