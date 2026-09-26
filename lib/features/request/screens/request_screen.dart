@@ -14,11 +14,6 @@ import '../../../core/services/service_type_service.dart';
 import '../../../core/utils/price_calculator.dart';
 import '../../../shared/widgets/custom_button.dart';
 
-// Conversion tolérante : Laravel sérialise parfois les colonnes DECIMAL
-// (base_price, km_cost, total_price...) sous forme de CHAÎNES dans le JSON
-// plutôt que de nombres. Un cast direct `as num` plante dans ce cas
-// (« type 'String' is not a subtype of type 'num?' »). Même pattern que
-// _toDouble dans core/models/models.dart, dupliqué ici car privé au fichier.
 double _estimateNum(dynamic v) {
   if (v == null) return 0;
   if (v is num) return v.toDouble();
@@ -43,26 +38,20 @@ class _RequestScreenState extends State<RequestScreen> {
   bool  _postFrameFired = false;
   bool  _initializeDone = false;
 
-  // ── Attente prestataire après soumission ──────────────────────────────────
-  // Quand submitRequest() réussit en mode auto, on affiche un écran "Recherche
-  // en cours…".
-  //
-  // FIX Bug A : 3 cas de sortie de la phase de recherche :
-  //   1. Timeout 60s sans réponse → popup "indisponible"
-  //   2. FCM intervention_update avec statut accepted/dispatched → navigation
-  //      vers /user/tracking (gérée par NotificationRouterService)
-  //      + _cancelSearch() pour nettoyer l'état local
-  //   3. FCM no_provider → _cancelSearch() + popup "indisponible"
-  //
-  // Le NotificationRouterService navigue vers /user/tracking quand il reçoit
-  // intervention_update. Ce faisant, RequestScreen est toujours dans la pile.
-  // Sans _cancelSearch(), si l'utilisateur revient en arrière il verrait
-  // encore l'écran de recherche (état incohérent).
+  // ── Attente prestataire apres soumission ──────────────────────────────────
   bool   _isSearching      = false;
   Timer? _searchTimeoutTimer;
   String? _searchingInterventionId;
 
-  // FIX Bug A : écouter les FCM foreground pendant la recherche
+  // FIX Bug C : etat "prestataire trouve" pour afficher la page de confirmation
+  // Avant ce fix : quand FCM intervention_update(accepted) arrivait,
+  // _cancelSearch() mettait _isSearching=false et le body revenait sur
+  // _ConfirmStep (le formulaire pre-soumission), completement vide visuellement.
+  // Maintenant : on passe par _ProviderFoundView qui affiche les infos
+  // du prestataire et un bouton "Suivre" vers /user/tracking/$id.
+  bool    _providerFound         = false;
+  String? _foundInterventionId;
+
   StreamSubscription<RemoteMessage>? _fcmSubscription;
 
   void _startSearchTimeout(String interventionId) {
@@ -75,41 +64,44 @@ class _RequestScreenState extends State<RequestScreen> {
     });
     setState(() { _isSearching = true; });
 
-    // FIX Bug A : écouter les messages FCM foreground pour reagir en temps réel
     _fcmSubscription?.cancel();
-    _fcmSubscription = FirebaseMessaging.onMessage.listen(_onFcmDuringSearch);
+    _fcmSubscription =
+        FirebaseMessaging.onMessage.listen(_onFcmDuringSearch);
   }
 
-  // FIX Bug A : réaction FCM pendant la phase de recherche
   void _onFcmDuringSearch(RemoteMessage message) {
     if (!mounted || !_isSearching) return;
     final type = message.data['type'] as String?;
     final id   = message.data['intervention_id'] as String?;
 
-    // Vérifier que le message concerne NOTRE intervention en cours
-    final isOurIntervention = id == null || id == _searchingInterventionId;
+    final isOurIntervention =
+        id == null || id == _searchingInterventionId;
     if (!isOurIntervention) return;
 
     if (type == 'no_provider') {
-      // Aucun prestataire disponible — sortir de la recherche
       _cancelSearch();
       _showNoProviderDialog();
     } else if (type == 'intervention_update') {
       final status = message.data['status'] as String?;
-      if (status == 'accepted' || status == 'dispatched' || status == 'en_route') {
-        // Un prestataire a accepté — NotificationRouterService navigue déjà
-        // vers /user/tracking. On nettoie juste l'état local.
+      if (status == 'accepted' ||
+          status == 'dispatched' ||
+          status == 'en_route') {
+        // FIX Bug C : ne pas naviguer immediatement — afficher la
+        // page de confirmation d'abord, avec le bouton "Suivre".
         _cancelSearch();
-        // Navigation vers tracking si elle n'a pas encore eu lieu
         if (id != null && mounted) {
-          context.push('/user/tracking/$id');
+          setState(() {
+            _providerFound       = true;
+            _foundInterventionId = id;
+          });
         }
-      } else if (status == 'cancelled' || status == 'rejected' || status == 'failed') {
-        // La demande a été annulée/rejetée
+      } else if (status == 'cancelled' ||
+          status == 'rejected' ||
+          status == 'failed') {
         _cancelSearch();
         _showNoProviderDialog(
-          title: 'Demande annulée',
-          message: 'La demande a été annulée. Veuillez réessayer.',
+          title: 'Demande annulee',
+          message: 'La demande a ete annulee. Veuillez reessayer.',
         );
       }
     }
@@ -119,22 +111,24 @@ class _RequestScreenState extends State<RequestScreen> {
     _searchTimeoutTimer?.cancel();
     _searchTimeoutTimer = null;
     _searchingInterventionId = null;
-    _fcmSubscription?.cancel(); // FIX Bug A : arrêter l'écoute FCM
+    _fcmSubscription?.cancel();
     _fcmSubscription = null;
     if (mounted) setState(() { _isSearching = false; });
   }
 
   Future<void> _showNoProviderDialog({
     String title   = 'Prestataires indisponibles',
-    String message = 'Aucun prestataire n\'est disponible dans votre zone pour le moment.\n\n'
-                     'Réessayez dans quelques minutes ou modifiez votre demande.',
+    String message =
+        'Aucun prestataire n\'est disponible dans votre zone pour le moment.\n\n'
+        'Reessayez dans quelques minutes ou modifiez votre demande.',
   }) async {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(title),
         content: Text(message),
         actions: [
@@ -147,13 +141,12 @@ class _RequestScreenState extends State<RequestScreen> {
               Navigator.of(ctx).pop();
               context.read<RequestController>().goBack();
             },
-            child: const Text('Réessayer'),
+            child: const Text('Reessayer'),
           ),
         ],
       ),
     );
   }
-  // ─────────────────────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -162,21 +155,19 @@ class _RequestScreenState extends State<RequestScreen> {
     FirebaseCrashlytics.instance.log(
         'RequestScreen.initState provider=${widget.preselectedProvider?.id ?? "aucun"}');
 
-    // Watchdog : si rien ne s'est passé après 20s (ni position, ni erreur,
-    // ni même le postFrame déclenché), on force un rapport Crashlytics
-    // non-fatal avec tout le contexte utile — pour diagnostiquer un
-    // blocage à distance, sans câble ni flutter run.
     _watchdog = Timer(const Duration(seconds: 20), _reportIfStuck);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _postFrameFired = true;
-      FirebaseCrashlytics.instance.log('RequestScreen: appel ctrl.initialize()');
+      FirebaseCrashlytics.instance
+          .log('RequestScreen: appel ctrl.initialize()');
       await context.read<RequestController>().initialize(
             preselectedProvider: widget.preselectedProvider,
             mode: widget.mode,
           );
       _initializeDone = true;
-      FirebaseCrashlytics.instance.log('RequestScreen: ctrl.initialize() terminé');
+      FirebaseCrashlytics.instance
+          .log('RequestScreen: ctrl.initialize() termine');
       _watchdog?.cancel();
     });
   }
@@ -187,20 +178,23 @@ class _RequestScreenState extends State<RequestScreen> {
 
     final String reason;
     if (!_postFrameFired) {
-      reason = 'addPostFrameCallback jamais déclenché (le widget n\'a peut-être '
+      reason =
+          'addPostFrameCallback jamais declenche (le widget n\'a peut-etre '
           'jamais fini de se construire)';
     } else if (!_initializeDone) {
-      reason = 'ctrl.initialize() appelé mais jamais terminé après 20s '
-          '(bloqué dans ServiceTypeService.load, getCurrentPosition, ou ailleurs '
-          'malgré les timeouts internes)';
+      reason =
+          'ctrl.initialize() appele mais jamais termine apres 20s '
+          '(bloque dans ServiceTypeService.load, getCurrentPosition, ou ailleurs '
+          'malgre les timeouts internes)';
     } else if (ctrl.userPosition == null && ctrl.error == null) {
-      reason = 'initialize() terminé mais userPosition et error restent null';
+      reason =
+          'initialize() termine mais userPosition et error restent null';
     } else {
-      return; // Tout va bien, rien à signaler.
+      return;
     }
 
     FirebaseCrashlytics.instance.recordError(
-      Exception('RequestScreen bloqué 20s+ : $reason'),
+      Exception('RequestScreen bloque 20s+ : $reason'),
       StackTrace.current,
       fatal: false,
       information: [
@@ -222,7 +216,7 @@ class _RequestScreenState extends State<RequestScreen> {
   void dispose() {
     _watchdog?.cancel();
     _searchTimeoutTimer?.cancel();
-    _fcmSubscription?.cancel(); // FIX Bug A
+    _fcmSubscription?.cancel();
     super.dispose();
   }
 
@@ -235,8 +229,16 @@ class _RequestScreenState extends State<RequestScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),
           onPressed: () {
+            if (_providerFound) {
+              // Reset l'etat et retourner a l'accueil
+              setState(() {
+                _providerFound       = false;
+                _foundInterventionId = null;
+              });
+              context.pop();
+              return;
+            }
             if (_isSearching) {
-              // FIX Bug A : annuler la recherche si on appuie sur retour
               _cancelSearch();
               return;
             }
@@ -252,19 +254,34 @@ class _RequestScreenState extends State<RequestScreen> {
           child: _StepIndicator(step: ctrl.step),
         ),
       ),
+      // FIX Bug C : trois etats possibles pour le body :
+      //   1. _isSearching      → spinner "Recherche en cours"
+      //   2. _providerFound    → page de confirmation prestataire
+      //   3. sinon             → etapes normales du formulaire
       body: _isSearching
           ? _SearchingProviderView(onCancel: _cancelSearch)
-          : AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: switch (ctrl.step) {
-                RequestStep.selectService  => _SelectServiceStep(ctrl: ctrl),
-                RequestStep.selectProvider => _SelectProviderStep(ctrl: ctrl),
-                RequestStep.confirm        => _ConfirmStep(
-                    ctrl: ctrl,
-                    onSubmitted: _startSearchTimeout,
-                  ),
-              },
-            ),
+          : _providerFound
+              ? _ProviderFoundView(
+                  interventionId: _foundInterventionId!,
+                  onTrack: () {
+                    if (_foundInterventionId != null) {
+                      context.go('/user/tracking/$_foundInterventionId');
+                    }
+                  },
+                )
+              : AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: switch (ctrl.step) {
+                    RequestStep.selectService =>
+                      _SelectServiceStep(ctrl: ctrl),
+                    RequestStep.selectProvider =>
+                      _SelectProviderStep(ctrl: ctrl),
+                    RequestStep.confirm => _ConfirmStep(
+                        ctrl: ctrl,
+                        onSubmitted: _startSearchTimeout,
+                      ),
+                  },
+                ),
     );
   }
 
@@ -273,6 +290,82 @@ class _RequestScreenState extends State<RequestScreen> {
         RequestStep.selectProvider => 'Choisir un prestataire',
         RequestStep.confirm        => 'Confirmer la demande',
       };
+}
+
+// ── FIX Bug C : page de confirmation prestataire trouve ──────────────────────
+// Affichee quand FCM intervention_update(accepted) arrive pendant la recherche.
+// Remplace le formulaire vide qui s'affichait avant ce fix.
+class _ProviderFoundView extends StatelessWidget {
+  final String interventionId;
+  final VoidCallback onTrack;
+
+  const _ProviderFoundView({
+    required this.interventionId,
+    required this.onTrack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.check_circle_rounded,
+                color: Colors.green.shade600,
+                size: 56,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Prestataire trouve !',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Un prestataire a accepte votre demande et est en route.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                color: AppColors.textMuted,
+              ),
+            ),
+            const SizedBox(height: 40),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onTrack,
+                icon: const Icon(Icons.location_on),
+                label: const Text(
+                  'Suivre le prestataire',
+                  style: TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ── Step 1: Select Service ────────────────────────────────────────────────────
@@ -294,13 +387,14 @@ class _SelectServiceStep extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, color: AppColors.error, size: 48),
+            const Icon(Icons.error_outline,
+                color: AppColors.error, size: 48),
             const SizedBox(height: 12),
             Text(stService.error!),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () => stService.load(force: true),
-              child: const Text('Réessayer'),
+              child: const Text('Reessayer'),
             ),
           ],
         ),
@@ -308,8 +402,6 @@ class _SelectServiceStep extends StatelessWidget {
     }
 
     final all = stService.serviceTypes;
-    // Si un prestataire est présélectionné (tapé sur la carte), on ne
-    // propose QUE ses propres services, pas tout le catalogue.
     final prov = ctrl.selectedProvider;
     final services = (prov != null && prov.serviceTypes.isNotEmpty)
         ? all
@@ -324,7 +416,7 @@ class _SelectServiceStep extends StatelessWidget {
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            "Ce prestataire n'a pas encore renseigné ses services.",
+            "Ce prestataire n'a pas encore renseigne ses services.",
             textAlign: TextAlign.center,
           ),
         ),
@@ -392,7 +484,7 @@ class _ServiceTile extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'à partir de ${service.formattedBasePrice}',
+                'a partir de ${service.formattedBasePrice}',
                 style: const TextStyle(
                   color: AppColors.primary,
                   fontSize: 11,
@@ -418,6 +510,7 @@ class _SelectProviderStep extends StatefulWidget {
 class _SelectProviderStepState extends State<_SelectProviderStep> {
   List<ProviderModel> _providers = [];
   bool _loading = true;
+  bool _noPosition = false;
 
   @override
   void initState() {
@@ -425,27 +518,20 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
     _loadProviders();
   }
 
-  bool _noPosition = false;
-
   Future<void> _loadProviders() async {
     final pos       = widget.ctrl.userPosition;
     final serviceId = widget.ctrl.selectedService?.id;
     if (pos == null) {
-      // BUG CORRIGÉ : avant, un simple `return` laissait _loading=true pour
-      // toujours (spinner infini, silencieux, sans erreur ni exception —
-      // donc invisible pour Crashlytics). Cas réel : GPS désactivé,
-      // permission refusée, ou position jamais obtenue lors de
-      // l'initialisation, mais l'utilisateur a quand même pu avancer
-      // jusqu'à cet écran.
       FirebaseCrashlytics.instance.recordError(
-        Exception('_SelectProviderStep: userPosition null, impossible de charger les prestataires'),
+        Exception(
+            '_SelectProviderStep: userPosition null, impossible de charger les prestataires'),
         StackTrace.current,
         fatal: false,
       );
       if (mounted) {
         setState(() {
-          _loading     = false;
-          _noPosition  = true;
+          _loading    = false;
+          _noPosition = true;
         });
       }
       return;
@@ -457,21 +543,25 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
       });
     }
     try {
-      final data = await ApiService.instance.getNearbyProviders(
-        latitude:      pos.latitude,
-        longitude:     pos.longitude,
-        serviceTypeId: serviceId,
-      ).timeout(const Duration(seconds: 30));
+      final data = await ApiService.instance
+          .getNearbyProviders(
+            latitude:      pos.latitude,
+            longitude:     pos.longitude,
+            serviceTypeId: serviceId,
+          )
+          .timeout(const Duration(seconds: 30));
       if (mounted) {
         setState(() {
           _providers = data
-              .map((e) => ProviderModel.fromJson(e as Map<String, dynamic>))
+              .map((e) =>
+                  ProviderModel.fromJson(e as Map<String, dynamic>))
               .toList();
           _loading = false;
         });
       }
     } catch (e) {
-      FirebaseCrashlytics.instance.log('[_SelectProviderStep] getNearbyProviders erreur: $e');
+      FirebaseCrashlytics.instance.log(
+          '[_SelectProviderStep] getNearbyProviders erreur: $e');
       if (mounted) { setState(() => _loading = false); }
     }
   }
@@ -487,17 +577,18 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.location_off, size: 48, color: AppColors.textMuted),
+              const Icon(Icons.location_off,
+                  size: 48, color: AppColors.textMuted),
               const SizedBox(height: 16),
               const Text(
-                'Position GPS indisponible.\nActivez le GPS et réessayez.',
+                'Position GPS indisponible.\nActivez le GPS et reessayez.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 15),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _loadProviders,
-                child: const Text('Réessayer'),
+                child: const Text('Reessayer'),
               ),
             ],
           ),
@@ -516,12 +607,13 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.search_off, size: 48, color: AppColors.textMuted),
+              const Icon(Icons.search_off,
+                  size: 48, color: AppColors.textMuted),
               const SizedBox(height: 16),
               Text(
                 service != null
-                    ? 'Aucun prestataire disponible pour "${service.name}" près de vous.'
-                    : 'Aucun prestataire disponible près de vous.',
+                    ? 'Aucun prestataire disponible pour "${service.name}" pres de vous.'
+                    : 'Aucun prestataire disponible pres de vous.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 15),
               ),
@@ -543,17 +635,22 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
         final p = _providers[i];
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             leading: CircleAvatar(
               backgroundColor: AppColors.primaryLight,
               child: Text(
                 p.name.isNotEmpty ? p.name[0].toUpperCase() : '?',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+            title: Text(p.name,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -561,7 +658,8 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
                   Text('📍 ${p.distanceKm!.toStringAsFixed(1)} km',
                       style: const TextStyle(fontSize: 12)),
                 Row(children: [
-                  const Icon(Icons.star, size: 14, color: Colors.amber),
+                  const Icon(Icons.star,
+                      size: 14, color: Colors.amber),
                   const SizedBox(width: 4),
                   Text(p.rating.toStringAsFixed(1),
                       style: const TextStyle(fontSize: 12)),
@@ -593,24 +691,29 @@ class _ConfirmStep extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Récap ──────────────────────────────────────────────────────
           Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Récapitulatif',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  const Text('Recapitulatif',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 16)),
                   const SizedBox(height: 12),
-                  _Row('Service', ctrl.selectedService?.name ?? '—'),
+                  _Row('Service',
+                      ctrl.selectedService?.name ?? '—'),
                   if (ctrl.selectedProvider != null)
-                    _Row('Prestataire', ctrl.selectedProvider!.name),
+                    _Row('Prestataire',
+                        ctrl.selectedProvider!.name),
                   if (ctrl.isAuto)
                     const _Row('Affectation', 'Automatique'),
-                  _Row('Position', ctrl.userAddress ?? 'Position GPS'),
-                  _Row('Paiement', _paymentLabel(ctrl.paymentMethod)),
+                  _Row('Position',
+                      ctrl.userAddress ?? 'Position GPS'),
+                  _Row('Paiement',
+                      _paymentLabel(ctrl.paymentMethod)),
                   if (ctrl.estimateLoading)
                     const Padding(
                       padding: EdgeInsets.only(top: 8),
@@ -618,17 +721,26 @@ class _ConfirmStep extends StatelessWidget {
                     )
                   else if (ctrl.estimate != null) ...[
                     const Divider(height: 20),
-                    if (_estimateNum(ctrl.estimate!['distance_km']) > 0)
-                      _Row('Distance',
+                    if (_estimateNum(
+                            ctrl.estimate!['distance_km']) >
+                        0)
+                      _Row(
+                          'Distance',
                           '${_estimateNum(ctrl.estimate!['distance_km']).toStringAsFixed(1)} km'),
                     _Row('Prix de base',
-                        _fmt(_estimateNum(ctrl.estimate!['base_price']))),
-                    if (_estimateNum(ctrl.estimate!['km_cost']) > 0)
-                      _Row('Déplacement',
-                          _fmt(_estimateNum(ctrl.estimate!['km_cost']))),
+                        _fmt(_estimateNum(
+                            ctrl.estimate!['base_price']))),
+                    if (_estimateNum(
+                            ctrl.estimate!['km_cost']) >
+                        0)
+                      _Row(
+                          'Deplacement',
+                          _fmt(_estimateNum(
+                              ctrl.estimate!['km_cost']))),
                     _Row(
-                      'Total estimé',
-                      _fmt(_estimateNum(ctrl.estimate!['total_price'])),
+                      'Total estime',
+                      _fmt(_estimateNum(
+                          ctrl.estimate!['total_price'])),
                       bold: true,
                       valueColor: AppColors.primary,
                     ),
@@ -638,17 +750,15 @@ class _ConfirmStep extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-
-          // ── Paiement ───────────────────────────────────────────────────
           const Text('Mode de paiement',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              style: TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 8),
           _PaymentMethods(
             selected: ctrl.paymentMethod,
             onSelect: ctrl.setPaymentMethod,
           ),
           const SizedBox(height: 16),
-
           if (ctrl.submitError == SubmitError.generic) ...[
             Container(
               padding: const EdgeInsets.all(12),
@@ -657,10 +767,10 @@ class _ConfirmStep extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(ctrl.error!,
-                  style: const TextStyle(color: AppColors.error)),
+                  style:
+                      const TextStyle(color: AppColors.error)),
             ),
           ],
-
           const SizedBox(height: 32),
           AppButton(
             label: 'Envoyer la demande',
@@ -669,21 +779,16 @@ class _ConfirmStep extends StatelessWidget {
             icon: Icons.sos,
             onPressed: () async {
               if (auth.user == null) return;
-              final ok = await ctrl.submitRequest(user: auth.user!);
+              final ok =
+                  await ctrl.submitRequest(user: auth.user!);
               if (!ok || !context.mounted) return;
 
               final interventionId = ctrl.createdInterventionId;
               if (interventionId == null) return;
 
               if (ctrl.isAuto) {
-                // Mode auto : on ne navigue PAS vers tracking tout de suite.
-                // On attend 60s que le serveur dispatche et qu'un prestataire
-                // accepte (→ FCM intervention_update naviguera vers /user/tracking).
-                // Si personne ne répond en 60s → popup "indisponible".
-                // FIX Bug A : le FCM no_provider/intervention_update est aussi écouté.
                 onSubmitted?.call(interventionId);
               } else {
-                // Mode manuel : le prestataire est déjà ciblé, on va au tracking.
                 context.go('/user/tracking/$interventionId');
               }
             },
@@ -692,8 +797,8 @@ class _ConfirmStep extends StatelessWidget {
           Center(
             child: Text(
               ctrl.isAuto
-                  ? 'Nous contactons le meilleur prestataire disponible près de vous. Le déplacement sera ajouté une fois le prestataire trouvé.'
-                  : 'Le prestataire sera notifié immédiatement.',
+                  ? 'Nous contactons le meilleur prestataire disponible pres de vous. Le deplacement sera ajoute une fois le prestataire trouve.'
+                  : 'Le prestataire sera notifie immediatement.',
               style: const TextStyle(
                   color: AppColors.textMuted, fontSize: 12),
               textAlign: TextAlign.center,
@@ -704,13 +809,11 @@ class _ConfirmStep extends StatelessWidget {
     );
   }
 
-  String _fmt(double v) => '${v.toStringAsFixed(0).replaceAllMapped(
-        RegExp(r'(\d)(?=(\d{3})+$)'),
-        (m) => '${m[1]} ',
-      )} FCFA';
+  String _fmt(double v) =>
+      '${v.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]} ')} FCFA';
 
   String _paymentLabel(String method) => switch (method) {
-        'cash'         => 'Espèces',
+        'cash'         => 'Especes',
         'orange_money' => 'Orange Money',
         'wave'         => 'Wave',
         _              => method,
@@ -729,7 +832,8 @@ class _Row extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(children: [
           Text(label,
-              style: const TextStyle(color: AppColors.textSecondary)),
+              style: const TextStyle(
+                  color: AppColors.textSecondary)),
           const Spacer(),
           Text(value,
               style: TextStyle(
@@ -751,7 +855,7 @@ class _PaymentMethods extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final methods = [
-      ('cash',         '💵 Espèces'),
+      ('cash',         '💵 Especes'),
       ('orange_money', '🟠 Orange Money'),
       ('wave',         '🔵 Wave'),
     ];
@@ -762,7 +866,9 @@ class _PaymentMethods extends StatelessWidget {
                   value: m.$1,
                   groupValue: selected,
                   activeColor: AppColors.primary,
-                  onChanged: (v) { if (v != null) onSelect(v); },
+                  onChanged: (v) {
+                    if (v != null) onSelect(v);
+                  },
                 ),
                 title: Text(m.$2),
                 onTap: () => onSelect(m.$1),
@@ -788,15 +894,14 @@ class _StepIndicator extends StatelessWidget {
       );
 }
 
-// ── Vue "Recherche prestataire en cours" ─────────────────────────────────────
-// Affichée après soumission en mode AUTO pendant max 60 secondes.
-// FIX Bug A : aussi réactif aux FCM intervention_update et no_provider.
+// ── Vue "Recherche prestataire en cours" ──────────────────────────────────────
 class _SearchingProviderView extends StatefulWidget {
   final VoidCallback onCancel;
   const _SearchingProviderView({required this.onCancel});
 
   @override
-  State<_SearchingProviderView> createState() => _SearchingProviderViewState();
+  State<_SearchingProviderView> createState() =>
+      _SearchingProviderViewState();
 }
 
 class _SearchingProviderViewState extends State<_SearchingProviderView>
@@ -813,7 +918,8 @@ class _SearchingProviderViewState extends State<_SearchingProviderView>
       duration: const Duration(seconds: 1),
     )..repeat(reverse: true);
 
-    _dotTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+    _dotTimer =
+        Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (mounted) setState(() { _dots = (_dots + 1) % 4; });
     });
   }
@@ -833,7 +939,6 @@ class _SearchingProviderViewState extends State<_SearchingProviderView>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Icône animée
           AnimatedBuilder(
             animation: _pulse,
             builder: (_, __) => Opacity(
@@ -855,13 +960,13 @@ class _SearchingProviderViewState extends State<_SearchingProviderView>
           ),
           const SizedBox(height: 16),
           const Text(
-            'Nous contactons les prestataires disponibles près de vous.\n'
-            'Vous serez notifié dès qu\'un prestataire accepte.',
+            'Nous contactons les prestataires disponibles pres de vous.\n'
+            'Vous serez notifie des qu\'un prestataire accepte.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 15, color: AppColors.textMuted),
+            style: TextStyle(
+                fontSize: 15, color: AppColors.textMuted),
           ),
           const SizedBox(height: 48),
-          // Bouton annuler (optionnel)
           TextButton.icon(
             onPressed: widget.onCancel,
             icon: const Icon(Icons.cancel_outlined),

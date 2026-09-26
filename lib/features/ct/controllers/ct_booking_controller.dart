@@ -5,6 +5,12 @@ import '../../../core/models/vehicle_model.dart';
 import '../../../core/services/ct_service.dart';
 
 class CtBookingController extends ChangeNotifier {
+  // FIX Bug D : drapeau pour eviter notifyListeners() apres dispose()
+  // Les methodes async loadCenters() et loadSlots() appelaient notifyListeners()
+  // dans leur bloc finally, meme si le widget avait deja ete detruit entre temps,
+  // ce qui provoquait un crash "setState() called after dispose()".
+  bool _disposed = false;
+
   // ── Step ──────────────────────────────────────────────────────────────────
   int _step = 1;
   int get step => _step;
@@ -22,14 +28,8 @@ class CtBookingController extends ChangeNotifier {
   void goToStep3() => setStep(3);
   void goToStep4() => setStep(4);
 
-  // FIX Bug D : goBack() ne décrémente plus en dessous de 1.
-  // Au step 1, la navigation hors de l'écran est gérée par PopScope
-  // dans ct_booking_flow_screen.dart → cette méthode ne sera jamais
-  // appelée depuis le step 1 (le bouton "Retour" n'existe pas à ce step).
   void goBack() {
-    // Si on revient du Step 5 (paiement en cours), arrêter le polling
     if (_step == 5) _stopPolling();
-    // FIX Bug D : sécurité — ne jamais descendre sous 1
     if (_step > 1) setStep(_step - 1);
   }
 
@@ -129,7 +129,8 @@ class CtBookingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get canProceedStep3 => _transportMode != 'driver' || _keyHandoverAccepted;
+  bool get canProceedStep3 =>
+      _transportMode != 'driver' || _keyHandoverAccepted;
 
   // ── Phone (Wave / Orange Money / MTN) ────────────────────────────────────
   String? _phone;
@@ -140,17 +141,14 @@ class CtBookingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Modes qui nécessitent un numéro de téléphone
   bool get requiresPhone =>
       _paymentMethod == 'wave' ||
       _paymentMethod == 'orange_money' ||
       _paymentMethod == 'mtn_money';
 
-  /// Le bouton "Payer" est actif quand :
-  ///  - un mode de paiement est sélectionné
-  ///  - si ce mode exige un téléphone, le champ est rempli
   bool get canPay =>
-      _paymentMethod != null && (!requiresPhone || (_phone != null && _phone!.length >= 8));
+      _paymentMethod != null &&
+      (!requiresPhone || (_phone != null && _phone!.length >= 8));
 
   // ── Fees ──────────────────────────────────────────────────────────────────
   double get towFee => 5000;
@@ -166,7 +164,8 @@ class CtBookingController extends ChangeNotifier {
               ? driverFee
               : 0);
 
-  double get totalAmount => _activeBooking?.totalAmount ?? (bookingFee + transportFee);
+  double get totalAmount =>
+      _activeBooking?.totalAmount ?? (bookingFee + transportFee);
 
   // ── Payment ───────────────────────────────────────────────────────────────
   String? _paymentMethod;
@@ -174,7 +173,6 @@ class CtBookingController extends ChangeNotifier {
 
   void setPaymentMethod(String v) {
     _paymentMethod = v;
-    // Réinitialiser le téléphone si on bascule vers carte (pas besoin de tél)
     if (v == 'card') _phone = null;
     notifyListeners();
   }
@@ -185,14 +183,13 @@ class CtBookingController extends ChangeNotifier {
   String? _qrToken;
   String? get qrToken => _qrToken;
 
-  /// Conservé pour rétro-compatibilité.
   String? get qrCodeUrl => null;
 
   // ── Active booking ────────────────────────────────────────────────────────
   CtBookingModel? _activeBooking;
   CtBookingModel? get activeBooking => _activeBooking;
 
-  // ── Payment confirmed (après polling) ────────────────────────────────────
+  // ── Payment confirmed (apres polling) ────────────────────────────────────
   bool _paymentConfirmed = false;
   bool get paymentConfirmed => _paymentConfirmed;
 
@@ -217,21 +214,20 @@ class CtBookingController extends ChangeNotifier {
         _stopPolling();
         setStep(1);
       } else {
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       }
     });
   }
 
-  // ── Polling (vérifie la confirmation du paiement) ─────────────────────────
+  // ── Polling ───────────────────────────────────────────────────────────────
   Timer? _pollingTimer;
   bool _isPolling = false;
   bool get isPolling => _isPolling;
 
-  /// Lance le polling toutes les 5 secondes jusqu'à confirmation ou expiration.
   void startPolling() {
     if (_activeBooking == null || _isPolling) return;
     _isPolling = true;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
 
     _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
       await _checkPaymentStatus();
@@ -242,22 +238,24 @@ class CtBookingController extends ChangeNotifier {
     _pollingTimer?.cancel();
     _pollingTimer = null;
     _isPolling = false;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   Future<void> _checkPaymentStatus() async {
     if (_activeBooking == null) return;
     try {
-      final booking = await CtService.instance.getBooking(_activeBooking!.id);
-      if (booking.paymentStatus == 'paid' || booking.status == 'confirmed') {
+      final booking =
+          await CtService.instance.getBooking(_activeBooking!.id);
+      if (booking.paymentStatus == 'paid' ||
+          booking.status == 'confirmed') {
         _paymentConfirmed = true;
         _qrToken = booking.qrToken ?? _qrToken;
         _activeBooking = booking;
         _stopPolling();
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       }
     } catch (_) {
-      // Silencieux — on réessaie au prochain tick
+      // Silencieux — on reessaie au prochain tick
     }
   }
 
@@ -286,7 +284,7 @@ class CtBookingController extends ChangeNotifier {
           ),
         )
         .toSet();
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   void _animateToCenters() {
@@ -332,34 +330,36 @@ class CtBookingController extends ChangeNotifier {
   Future<void> loadVehicles() async {
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     try {
       _vehicles = await CtService.instance.getVehicles();
     } catch (e) {
       _error = e.toString();
     } finally {
       _isLoading = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
   Future<void> loadCenters({String? date, double? lat, double? lng}) async {
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     try {
       _centers = await CtService.instance.getCenters(
         date: date,
         lat: lat,
         lng: lng,
       );
-      _buildMapMarkers();
-      _animateToCenters();
+      if (!_disposed) {
+        _buildMapMarkers();
+        _animateToCenters();
+      }
     } catch (e) {
       _error = e.toString();
     } finally {
       _isLoading = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -367,15 +367,15 @@ class CtBookingController extends ChangeNotifier {
     if (_selectedCenter == null) return;
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     try {
-      _slots = await CtService.instance.getAvailableSlots(
-          _selectedCenter!.id, date);
+      _slots = await CtService.instance
+          .getAvailableSlots(_selectedCenter!.id, date);
     } catch (e) {
       _error = e.toString();
     } finally {
       _isLoading = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -383,13 +383,13 @@ class CtBookingController extends ChangeNotifier {
     if (_selectedVehicle == null ||
         _selectedCenter == null ||
         _selectedSlot == null) {
-      _error = 'Veuillez compléter toutes les sélections.';
-      notifyListeners();
+      _error = 'Veuillez completer toutes les selections.';
+      if (!_disposed) notifyListeners();
       return false;
     }
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     try {
       _activeBooking = await CtService.instance.initiateBooking(
         vehicleId: _selectedVehicle!.id,
@@ -403,34 +403,36 @@ class CtBookingController extends ChangeNotifier {
       return false;
     } finally {
       _isLoading = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
   Future<bool> pay() async {
     if (_activeBooking == null || _paymentMethod == null) {
-      _error = 'Aucune réservation active ou mode de paiement non sélectionné.';
-      notifyListeners();
+      _error =
+          'Aucune reservation active ou mode de paiement non selectionne.';
+      if (!_disposed) notifyListeners();
       return false;
     }
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     try {
       final result = await CtService.instance.initiatePayment(
         _activeBooking!.id,
         paymentMethod: _paymentMethod!,
-        phone: _phone, // null pour carte bancaire
+        phone: _phone,
       );
       _paymentUrl = result['payment_url'] as String?;
-      _qrToken = (result['qr_token'] as String?) ?? _activeBooking!.qrToken;
+      _qrToken =
+          (result['qr_token'] as String?) ?? _activeBooking!.qrToken;
       return true;
     } catch (e) {
       _error = e.toString();
       return false;
     } finally {
       _isLoading = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -459,11 +461,12 @@ class CtBookingController extends ChangeNotifier {
     _reservationSecondsLeft = 0;
     _mapMarkers = {};
     _mapController = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _countdownTimer?.cancel();
     _stopPolling();
     _mapController?.dispose();
