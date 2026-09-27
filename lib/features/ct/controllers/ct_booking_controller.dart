@@ -1,6 +1,18 @@
+// lib/features/ct/controllers/ct_booking_controller.dart
+// ─────────────────────────────────────────────────────────────────────────────
+// Contrôleur du flow de réservation CT (5 étapes).
+//
+// ⚠️ CONTRAT BACKEND (validé le 28/09/2026) :
+//   - bookingsStore : crée en 'pending_payment', frais calculés côté backend
+//   - L'app récupère booking_fee, transport_fee, total_amount depuis l'API
+//   - Le paiement réel passe par /ct/bookings/{id}/pay (DigitalPaye)
+//   - Les centres sont filtrés par operator_ids quand on vient d'un devis
+// ─────────────────────────────────────────────────────────────────────────────
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+
 import '../../../core/models/vehicle_model.dart';
 import '../../../core/models/ct_quote_model.dart';
 import '../../../core/services/ct_service.dart';
@@ -9,10 +21,12 @@ class CtBookingController extends ChangeNotifier {
   bool _disposed = false;
 
   // ── Step ──────────────────────────────────────────────────────────────────
+
   int _step = 1;
   int get step => _step;
 
   void setStep(int s) {
+    if (_step == s) return;
     _step = s;
     notifyListeners();
   }
@@ -30,7 +44,8 @@ class CtBookingController extends ChangeNotifier {
     if (_step > 1) setStep(_step - 1);
   }
 
-  // ── Loading / Error ───────────────────────────────────────────────────────
+  // ── Loading / Error ──────────────────────────────────────────────────────
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -38,43 +53,34 @@ class CtBookingController extends ChangeNotifier {
   String? get error => _error;
 
   void clearError() {
+    if (_error == null) return;
     _error = null;
     notifyListeners();
   }
 
-  // ── BookingHint (depuis acceptation devis) ────────────────────────────────
+  // ── BookingHint (depuis acceptation devis) ───────────────────────────────
+
   CtBookingHint? _bookingHint;
+  CtBookingHint? get bookingHint => _bookingHint;
 
   /// true si ce flow vient de l'acceptation d'un devis CT.
-  /// Dans ce cas : centres filtrés par operatorIds, transport pré-fixé, montant depuis hint.
   bool get fromHint => _bookingHint != null;
 
-  /// IDs des opérateurs CT proposés dans le devis (filtre les centres à afficher)
-  List<String> get hintOperatorIds => _bookingHint?.operatorIds ?? [];
+  /// IDs des opérateurs CT proposés dans le devis.
+  List<String> get hintOperatorIds => _bookingHint?.operatorIds ?? const [];
 
-  // ── Vehicles ──────────────────────────────────────────────────────────────
-  List<VehicleModel> _vehicles = [];
-  List<VehicleModel> get vehicles => _vehicles;
-
-  VehicleModel? _selectedVehicle;
-  VehicleModel? get selectedVehicle => _selectedVehicle;
-
-  void selectVehicle(VehicleModel v) {
-    _selectedVehicle = v;
-    notifyListeners();
-  }
-
-  /// Pré-sélectionne le véhicule depuis un bookingHint (après acceptation devis CT)
-  /// et saute directement à l'étape 2 sans repasser par la sélection de véhicule.
+  /// Applique le hint : pré-charge véhicule, transport, montant, puis saute
+  /// directement à l'étape 2 (centre + créneau) filtrée par operatorIds.
   Future<void> applyBookingHint(CtBookingHint hint) async {
     _bookingHint = hint;
     _isLoading = true;
     _error = null;
-    // Pré-charger le montant depuis le devis accepté
-    _hintAmount = hint.amount;
-    // Transport mode imposé par le devis
+
+    // Transport imposé par le devis (l'utilisateur ne pourra pas le changer)
     _transportMode = hint.transportMode;
+
     if (!_disposed) notifyListeners();
+
     try {
       _vehicles = await CtService.instance.getVehicles();
       final match = _vehicles.where((v) => v.id == hint.vehicleId).firstOrNull;
@@ -89,52 +95,103 @@ class CtBookingController extends ChangeNotifier {
       _isLoading = false;
       if (!_disposed) notifyListeners();
     }
-    // Passer directement à l'étape 2 (centre + créneau), filtré par operatorIds
+
+    // Passer directement à l'étape 2 (filtre operator_ids appliqué par le backend)
     setStep(2);
     await loadCenters();
   }
 
-  // ── Centers ───────────────────────────────────────────────────────────────
+  // ── Vehicles ─────────────────────────────────────────────────────────────
+
+  List<VehicleModel> _vehicles = [];
+  List<VehicleModel> get vehicles => _vehicles;
+
+  VehicleModel? _selectedVehicle;
+  VehicleModel? get selectedVehicle => _selectedVehicle;
+
+  void selectVehicle(VehicleModel v) {
+    _selectedVehicle = v;
+    notifyListeners();
+  }
+
+  Future<void> loadVehicles() async {
+    _isLoading = true;
+    _error = null;
+    if (!_disposed) notifyListeners();
+    try {
+      _vehicles = await CtService.instance.getVehicles();
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  // ── Centers ──────────────────────────────────────────────────────────────
+
   List<TechnicalCenterModel> _centers = [];
   List<TechnicalCenterModel> get centers => _centers;
 
-  /// Si on vient d'un devis, on filtre les centres par les opérateurs proposés.
-  List<TechnicalCenterModel> get availableCenters {
-    if (_bookingHint == null || _bookingHint!.operatorIds.isEmpty) {
-      return _centers;
-    }
-    final filtered = _centers
-        .where((c) => _bookingHint!.operatorIds.contains(c.operatorId))
-        .toList();
-    // Si le filtre ne donne rien (données incomplètes), on affiche tout
-    return filtered.isEmpty ? _centers : filtered;
-  }
+  /// ⚡ Depuis le fix backend (28/09/2026), le filtre operator_ids est
+  /// appliqué CÔTÉ SERVEUR dans /ct/centers. Plus besoin de filtrer côté
+  /// client. La liste reçue est déjà la bonne.
+  List<TechnicalCenterModel> get availableCenters => _centers;
 
   TechnicalCenterModel? _selectedCenter;
   TechnicalCenterModel? get selectedCenter => _selectedCenter;
 
+  /// Sélectionne un centre et charge ses créneaux pour la date courante.
   void selectCenter(TechnicalCenterModel c) {
     _selectedCenter = c;
     _selectedSlot = null;
+
+    // Centrer la map si le centre a des coordonnées
     if (c.latitude != null && c.longitude != null) {
       _mapController?.animateCamera(
         CameraUpdate.newLatLngZoom(LatLng(c.latitude!, c.longitude!), 14),
       );
     }
+
     notifyListeners();
-    if (_selectedDate != null) {
-      final dateStr =
-          '${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}';
-      loadSlots(dateStr);
-    } else {
-      final now = DateTime.now();
-      final dateStr =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      loadSlots(dateStr);
+
+    // Charger les créneaux pour la date sélectionnée (ou aujourd'hui)
+    final date = _selectedDate ?? DateTime.now();
+    loadSlots(_fmtDate(date));
+  }
+
+  Future<void> loadCenters({String? date, double? lat, double? lng}) async {
+    _isLoading = true;
+    _error = null;
+    if (!_disposed) notifyListeners();
+
+    try {
+      // Passer operator_ids au backend si on vient d'un devis.
+      final operatorIds = (_bookingHint != null && _bookingHint!.operatorIds.isNotEmpty)
+          ? _bookingHint!.operatorIds
+          : null;
+
+      _centers = await CtService.instance.getCenters(
+        date: date,
+        lat: lat,
+        lng: lng,
+        operatorIds: operatorIds,
+      );
+
+      if (!_disposed) {
+        _buildMapMarkers();
+        _animateToCenters();
+      }
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      if (!_disposed) notifyListeners();
     }
   }
 
-  // ── Slots ─────────────────────────────────────────────────────────────────
+  // ── Slots ────────────────────────────────────────────────────────────────
+
   List<SessionSlotModel> _slots = [];
   List<SessionSlotModel> get slots => _slots;
 
@@ -146,41 +203,70 @@ class CtBookingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Date ──────────────────────────────────────────────────────────────────
+  Future<void> loadSlots(String date) async {
+    if (_selectedCenter == null) return;
+    _isLoading = true;
+    _error = null;
+    if (!_disposed) notifyListeners();
+
+    try {
+      _slots = await CtService.instance
+          .getAvailableSlots(_selectedCenter!.id, date);
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  // ── Date ─────────────────────────────────────────────────────────────────
+
   DateTime? _selectedDate;
   DateTime? get selectedDate => _selectedDate;
 
+  /// Change la date sélectionnée :
+  ///   - recharge les centres (filtre operator_ids conservé)
+  ///   - recharge les créneaux du centre déjà sélectionné (si présent)
   void selectDate(DateTime d) {
     _selectedDate = d;
-    // Réinitialiser la sélection de créneau quand la date change
     _selectedSlot = null;
     notifyListeners();
-    final dateStr =
-        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-    // loadCenters rechargera avec le filtre operator_ids si on vient d'un devis
+
+    final dateStr = _fmtDate(d);
     loadCenters(date: dateStr);
-    // loadSlots ne s'exécute que si un centre est déjà sélectionné
-    if (_selectedCenter != null) loadSlots(dateStr);
+
+    if (_selectedCenter != null) {
+      loadSlots(dateStr);
+    }
   }
 
-  // ── Transport mode ────────────────────────────────────────────────────────
+  /// Format YYYY-MM-DD pour l'API.
+  String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  // ── Transport mode ───────────────────────────────────────────────────────
+
   String _transportMode = 'self';
   String get transportMode => _transportMode;
 
-  /// Si on vient d'un devis, le transport est imposé — non modifiable par l'utilisateur.
+  /// Si on vient d'un devis, le transport est imposé — non modifiable.
   bool get transportLocked => fromHint;
 
   void setTransportMode(String v) {
-    if (transportLocked) return; // ignoré si vient d'un devis
+    if (transportLocked) return;
+    if (_transportMode == v) return;
     _transportMode = v;
     notifyListeners();
   }
 
-  // ── Key handover ──────────────────────────────────────────────────────────
+  // ── Key handover ─────────────────────────────────────────────────────────
+
   bool _keyHandoverAccepted = false;
   bool get keyHandoverAccepted => _keyHandoverAccepted;
 
   void setKeyHandoverAccepted(bool v) {
+    if (_keyHandoverAccepted == v) return;
     _keyHandoverAccepted = v;
     notifyListeners();
   }
@@ -188,12 +274,14 @@ class CtBookingController extends ChangeNotifier {
   bool get canProceedStep3 =>
       _transportMode != 'driver' || _keyHandoverAccepted;
 
-  // ── Phone ─────────────────────────────────────────────────────────────────
+  // ── Phone ────────────────────────────────────────────────────────────────
+
   String? _phone;
   String? get phone => _phone;
 
   void setPhone(String v) {
-    _phone = v.trim().isEmpty ? null : v.trim();
+    final trimmed = v.trim();
+    _phone = trimmed.isEmpty ? null : trimmed;
     notifyListeners();
   }
 
@@ -202,52 +290,8 @@ class CtBookingController extends ChangeNotifier {
       _paymentMethod == 'orange_money' ||
       _paymentMethod == 'mtn_money';
 
-  bool get canPay =>
-      _paymentMethod != null &&
-      (!requiresPhone || (_phone != null && _phone!.length >= 8));
+  // ── Payment method ───────────────────────────────────────────────────────
 
-  // ── Fees ──────────────────────────────────────────────────────────────────
-  /// Montant pré-chargé depuis le devis accepté (hint.amount = final_amount du devis).
-  int _hintAmount = 0;
-
-  double get towFee    => fromHint ? 0 : 5000;   // déjà inclus dans hint.amount
-  double get driverFee => fromHint ? 0 : 8000;
-
-  /// Frais de contrôle : depuis la réservation active si disponible ET non nul,
-  /// sinon depuis le devis accepté (hintAmount), sinon valeur par défaut.
-  double get bookingFee {
-    // Quand on vient d'un devis, le montant du devis est la référence principale.
-    // On l'utilise si le backend ne renvoie pas de booking_fee dans la réponse.
-    if (_activeBooking != null && _activeBooking!.bookingFee > 0) {
-      return _activeBooking!.bookingFee;
-    }
-    if (_hintAmount > 0) return _hintAmount.toDouble();
-    if (_activeBooking != null) return _activeBooking!.bookingFee;
-    return 15000;
-  }
-
-  /// Frais de transport : 0 si vient d'un devis (déjà inclus dans bookingFee),
-  /// sinon calculé selon le mode.
-  double get transportFee {
-    if (fromHint) return 0; // inclus dans le montant du devis
-    if (_activeBooking != null && _activeBooking!.transportFee > 0) {
-      return _activeBooking!.transportFee;
-    }
-    return _transportMode == 'tow'
-        ? towFee
-        : _transportMode == 'driver'
-            ? driverFee
-            : 0;
-  }
-
-  double get totalAmount {
-    if (_activeBooking != null && _activeBooking!.totalAmount > 0) {
-      return _activeBooking!.totalAmount;
-    }
-    return bookingFee + transportFee;
-  }
-
-  // ── Payment ───────────────────────────────────────────────────────────────
   String? _paymentMethod;
   String? get paymentMethod => _paymentMethod;
 
@@ -257,22 +301,66 @@ class CtBookingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  String? _paymentUrl;
-  String? get paymentUrl => _paymentUrl;
+  bool get canPay =>
+      _paymentMethod != null &&
+      (!requiresPhone || (_phone != null && _phone!.length >= 8));
 
-  String? _qrToken;
-  String? get qrToken => _qrToken;
+  // ── Fees (calculés par le backend et renvoyés dans le booking) ───────────
 
-  String? get qrCodeUrl => null;
+  /// Frais du contrôle technique.
+  /// Priorité : valeur renvoyée par le backend après création du booking.
+  /// Fallback : montant du devis si on vient d'un hint.
+  /// Fallback final : 15000 FCFA (valeur par défaut prudente).
+  double get bookingFee {
+    if (_activeBooking != null && _activeBooking!.bookingFee > 0) {
+      return _activeBooking!.bookingFee;
+    }
+    if (fromHint && _bookingHint!.amount > 0) {
+      return _bookingHint!.amount.toDouble();
+    }
+    return 15000;
+  }
 
-  // ── Active booking ────────────────────────────────────────────────────────
+  /// Frais de transport.
+  /// Priorité : valeur backend. Sinon 0 si hint (déjà inclus).
+  /// Sinon calcul local (prévisualisation avant création du booking).
+  double get transportFee {
+    if (_activeBooking != null && _activeBooking!.transportFee > 0) {
+      return _activeBooking!.transportFee;
+    }
+    if (fromHint) return 0; // inclus dans le montant du devis
+    return switch (_transportMode) {
+      'tow'    => 5000,
+      'driver' => 8000,
+      _        => 0,
+    };
+  }
+
+  /// Montant total à payer.
+  /// Priorité : valeur backend. Sinon somme des frais calculés.
+  double get totalAmount {
+    if (_activeBooking != null && _activeBooking!.totalAmount > 0) {
+      return _activeBooking!.totalAmount;
+    }
+    return bookingFee + transportFee;
+  }
+
+  // ── Active booking ───────────────────────────────────────────────────────
+
   CtBookingModel? _activeBooking;
   CtBookingModel? get activeBooking => _activeBooking;
 
   bool _paymentConfirmed = false;
   bool get paymentConfirmed => _paymentConfirmed;
 
-  // ── Reservation countdown ─────────────────────────────────────────────────
+  String? _paymentUrl;
+  String? get paymentUrl => _paymentUrl;
+
+  String? _qrToken;
+  String? get qrToken => _qrToken;
+
+  // ── Countdown ────────────────────────────────────────────────────────────
+
   int _reservationSecondsLeft = 0;
   int get reservationSecondsLeft => _reservationSecondsLeft;
 
@@ -282,6 +370,7 @@ class CtBookingController extends ChangeNotifier {
     _countdownTimer?.cancel();
     final until = _activeBooking?.slotReservedUntil;
     if (until == null) return;
+
     _reservationSecondsLeft = until.difference(DateTime.now()).inSeconds;
     if (_reservationSecondsLeft <= 0) return;
 
@@ -298,7 +387,8 @@ class CtBookingController extends ChangeNotifier {
     });
   }
 
-  // ── Polling ───────────────────────────────────────────────────────────────
+  // ── Polling ──────────────────────────────────────────────────────────────
+
   Timer? _pollingTimer;
   bool _isPolling = false;
   bool get isPolling => _isPolling;
@@ -316,8 +406,10 @@ class CtBookingController extends ChangeNotifier {
   void _stopPolling() {
     _pollingTimer?.cancel();
     _pollingTimer = null;
-    _isPolling = false;
-    if (!_disposed) notifyListeners();
+    if (_isPolling) {
+      _isPolling = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   Future<void> _checkPaymentStatus() async {
@@ -331,10 +423,13 @@ class CtBookingController extends ChangeNotifier {
         _stopPolling();
         if (!_disposed) notifyListeners();
       }
-    } catch (_) {}
+    } catch (_) {
+      // Erreur silencieuse — on retente au prochain tick
+    }
   }
 
-  // ── Map ───────────────────────────────────────────────────────────────────
+  // ── Map ──────────────────────────────────────────────────────────────────
+
   Set<Marker> _mapMarkers = {};
   Set<Marker> get mapMarkers => _mapMarkers;
 
@@ -346,24 +441,20 @@ class CtBookingController extends ChangeNotifier {
   }
 
   void _buildMapMarkers() {
-    // On marque les centres disponibles (filtrés si hint)
-    final toShow = availableCenters;
-    _mapMarkers = toShow
+    _mapMarkers = _centers
         .where((c) => c.latitude != null && c.longitude != null)
-        .map(
-          (c) => Marker(
-            markerId: MarkerId(c.id.toString()),
-            position: LatLng(c.latitude!, c.longitude!),
-            infoWindow: InfoWindow(title: c.name),
-            onTap: () => selectCenter(c),
-          ),
-        )
+        .map((c) => Marker(
+              markerId: MarkerId(c.id),
+              position: LatLng(c.latitude!, c.longitude!),
+              infoWindow: InfoWindow(title: c.name),
+              onTap: () => selectCenter(c),
+            ))
         .toSet();
     if (!_disposed) notifyListeners();
   }
 
   void _animateToCenters() {
-    final withCoords = availableCenters
+    final withCoords = _centers
         .where((c) => c.latitude != null && c.longitude != null)
         .toList();
     if (withCoords.isEmpty || _mapController == null) return;
@@ -401,77 +492,22 @@ class CtBookingController extends ChangeNotifier {
     );
   }
 
-  // ── API calls ─────────────────────────────────────────────────────────────
-  Future<void> loadVehicles() async {
-    _isLoading = true;
-    _error = null;
-    if (!_disposed) notifyListeners();
-    try {
-      _vehicles = await CtService.instance.getVehicles();
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      if (!_disposed) notifyListeners();
-    }
-  }
+  // ── API actions ──────────────────────────────────────────────────────────
 
-  Future<void> loadCenters({String? date, double? lat, double? lng}) async {
-    _isLoading = true;
-    _error = null;
-    if (!_disposed) notifyListeners();
-    try {
-      // Quand on vient d'un devis, on passe les operator_ids au backend
-      // pour ne récupérer que les centres proposés dans le devis.
-      final operatorIds = (_bookingHint != null && _bookingHint!.operatorIds.isNotEmpty)
-          ? _bookingHint!.operatorIds
-          : null;
-
-      _centers = await CtService.instance.getCenters(
-        date: date,
-        lat: lat,
-        lng: lng,
-        operatorIds: operatorIds,
-      );
-      if (!_disposed) {
-        _buildMapMarkers();
-        _animateToCenters();
-      }
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      if (!_disposed) notifyListeners();
-    }
-  }
-
-  Future<void> loadSlots(String date) async {
-    if (_selectedCenter == null) return;
-    _isLoading = true;
-    _error = null;
-    if (!_disposed) notifyListeners();
-    try {
-      _slots = await CtService.instance
-          .getAvailableSlots(_selectedCenter!.id, date);
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      if (!_disposed) notifyListeners();
-    }
-  }
-
+  /// Crée le booking (status = 'pending_payment' côté backend).
   Future<bool> initiateBooking() async {
     if (_selectedVehicle == null ||
         _selectedCenter == null ||
         _selectedSlot == null) {
-      _error = 'Veuillez completer toutes les selections.';
+      _error = 'Veuillez compléter toutes les sélections.';
       if (!_disposed) notifyListeners();
       return false;
     }
+
     _isLoading = true;
     _error = null;
     if (!_disposed) notifyListeners();
+
     try {
       _activeBooking = await CtService.instance.initiateBooking(
         vehicleId: _selectedVehicle!.id,
@@ -489,23 +525,35 @@ class CtBookingController extends ChangeNotifier {
     }
   }
 
+  /// Initie le paiement DigitalPaye.
+  /// Retourne true si l'URL de paiement (ou le QR direct) a été obtenu.
   Future<bool> pay() async {
     if (_activeBooking == null || _paymentMethod == null) {
-      _error = 'Aucune reservation active ou mode de paiement non selectionne.';
+      _error = 'Aucune réservation active ou mode de paiement non sélectionné.';
       if (!_disposed) notifyListeners();
       return false;
     }
+
     _isLoading = true;
     _error = null;
     if (!_disposed) notifyListeners();
+
     try {
       final result = await CtService.instance.initiatePayment(
         _activeBooking!.id,
         paymentMethod: _paymentMethod!,
         phone: _phone,
       );
+
       _paymentUrl = result['payment_url'] as String?;
       _qrToken = (result['qr_token'] as String?) ?? _activeBooking!.qrToken;
+
+      // Si le backend renvoie déjà un qr_token (paiement direct confirmé),
+      // on peut marquer comme confirmé.
+      if (_qrToken != null && result['payment_url'] == null) {
+        _paymentConfirmed = true;
+      }
+
       return true;
     } catch (e) {
       _error = e.toString();
@@ -516,33 +564,42 @@ class CtBookingController extends ChangeNotifier {
     }
   }
 
-  // ── Reset ─────────────────────────────────────────────────────────────────
+  // ── Reset ────────────────────────────────────────────────────────────────
+
   void reset() {
     _countdownTimer?.cancel();
     _stopPolling();
+
     _step = 1;
     _isLoading = false;
     _error = null;
+
     _bookingHint = null;
-    _hintAmount = 0;
+
     _vehicles = [];
     _selectedVehicle = null;
+
     _centers = [];
     _selectedCenter = null;
+
     _slots = [];
     _selectedSlot = null;
     _selectedDate = null;
+
     _transportMode = 'self';
     _keyHandoverAccepted = false;
+
     _phone = null;
     _paymentMethod = null;
     _paymentUrl = null;
-    _qrToken = null;
+
     _activeBooking = null;
     _paymentConfirmed = false;
+    _qrToken = null;
     _reservationSecondsLeft = 0;
+
     _mapMarkers = {};
-    _mapController = null;
+
     if (!_disposed) notifyListeners();
   }
 
@@ -550,8 +607,9 @@ class CtBookingController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _countdownTimer?.cancel();
-    _stopPolling();
-    _mapController?.dispose();
+    _pollingTimer?.cancel();
+    // ⚠️ On ne dispose PAS _mapController ici : c'est le widget GoogleMap
+    // qui en est propriétaire. Le disposer ici peut crasher sur iOS.
     super.dispose();
   }
 }
