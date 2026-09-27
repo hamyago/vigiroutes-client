@@ -1,5 +1,16 @@
-// models/vehicle_model.dart
-// Fiche numérique d'un véhicule — Module CT VigiRoutes Client
+// lib/core/models/vehicle_model.dart
+// ─────────────────────────────────────────────────────────────────────────────
+// Modèles du module CT : VehicleModel, TechnicalCenterModel, SessionSlotModel,
+// CtBookingModel.
+//
+// ⚠️ CONTRAT BACKEND (validé le 28/09/2026) :
+// Le backend /ct/bookings renvoie un format PLAT (pas d'objet imbriqué).
+// CtBookingModel gère les DEUX formats (imbriqué + plat) pour compatibilité.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VehicleModel — fiche numérique d'un véhicule
+// ─────────────────────────────────────────────────────────────────────────────
 
 class VehicleModel {
   final String id;
@@ -12,13 +23,12 @@ class VehicleModel {
   final String category; // VP, VU, Moto, Camion
   final String? energy;  // gasoil | essence | hybride | electrique
   final String? chassisNumber;
-  final String? carteGriseNumber;  // Numéro carte grise
-  final int?    puissanceCv;       // Puissance fiscale en CV
-  final int?    placesAssises;     // Nombre de places assises
-  final String? usage;             // public | privée
-  final double? ptacTonnes;        // Poids Total Autorisé en Charge (tonnes)
+  final String? carteGriseNumber;
+  final int?    puissanceCv;
+  final int?    placesAssises;
+  final String? usage;   // public | privée
+  final double? ptacTonnes;
 
-  // Dates expiration
   final DateTime? technicalVisitExpiresAt;
   final bool tvDateVerified;
   final DateTime? insuranceExpiresAt;
@@ -55,13 +65,11 @@ class VehicleModel {
     required this.createdAt,
   });
 
-  /// Nombre de jours avant expiration VT. Négatif si déjà expirée.
   int? get daysUntilVtExpiry {
     if (technicalVisitExpiresAt == null) return null;
     return technicalVisitExpiresAt!.difference(DateTime.now()).inDays;
   }
 
-  /// Niveau d'alerte VT
   VtAlertLevel get vtAlertLevel {
     final days = daysUntilVtExpiry;
     if (days == null) return VtAlertLevel.none;
@@ -190,7 +198,9 @@ class VehicleModel {
 
 enum VtAlertLevel { none, ok, info, warning, critical, expired }
 
-// ── TechnicalCenterModel ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// TechnicalCenterModel — un centre de contrôle technique
+// ─────────────────────────────────────────────────────────────────────────────
 
 class TechnicalCenterModel {
   final String id;
@@ -211,12 +221,10 @@ class TechnicalCenterModel {
   final String? description;
   final List<String> acceptedVehicleCategories;
 
-  // GPS actuel (pour unité mobile : peut différer de la position fixe)
   final double? sessionLatitude;
   final double? sessionLongitude;
   final String? sessionAddress;
 
-  // Slots disponibles pour la date demandée
   final List<SessionSlotModel> availableSlots;
 
   const TechnicalCenterModel({
@@ -256,9 +264,7 @@ class TechnicalCenterModel {
 
   factory TechnicalCenterModel.fromJson(Map<String, dynamic> json) => TechnicalCenterModel(
         id:           (json['id'] ?? '').toString(),
-        // L'API retourne operator_id en plat OU dans l'objet operator
         operatorId:   (json['operator_id'] ?? json['operator']?['id'] ?? '').toString(),
-        // L'API retourne operator_name en plat OU dans l'objet operator
         operatorName: (json['operator_name'] ?? json['operator']?['name'] ?? '').toString(),
         name:         (json['name'] ?? '').toString(),
         type:         (json['type'] ?? 'fixed').toString(),
@@ -286,9 +292,13 @@ class TechnicalCenterModel {
       );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SessionSlotModel — un créneau horaire
+// ─────────────────────────────────────────────────────────────────────────────
+
 class SessionSlotModel {
   final String sessionId;
-  final String slotTime;       // "08:00"
+  final String slotTime;
   final int remainingSlots;
   final bool isAvailable;
 
@@ -303,7 +313,6 @@ class SessionSlotModel {
     final remaining = json['remaining_slots'] is int
         ? json['remaining_slots'] as int
         : int.tryParse(json['remaining_slots']?.toString() ?? '0') ?? 0;
-    // L'API renvoie remaining_slots (int), pas is_available (bool)
     final available = json['is_available'] != null
         ? (json['is_available'] == true || json['is_available'] == 1)
         : remaining > 0;
@@ -314,9 +323,39 @@ class SessionSlotModel {
       isAvailable:    available,
     );
   }
+
+  /// Affiche uniquement "HH:mm" (le backend peut renvoyer "HH:mm:ss").
+  String get displayTime {
+    if (slotTime.length >= 5) return slotTime.substring(0, 5);
+    return slotTime;
+  }
 }
 
-// ── CtBookingModel ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CtBookingModel — une réservation de visite technique
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚠️ CONTRAT BACKEND (validé le 28/09/2026) :
+// Le backend renvoie un format PLAT :
+//   {
+//     "id": "...", "reference": "VT-XXXX",
+//     "status": "pending_payment" | "confirmed" | "cancelled" | ...,
+//     "payment_status": "pending" | "paid",
+//     "payment_method": "wave" | ...,
+//     "paid_at": "...",
+//     "transport_mode": "self" | "tow" | "driver",
+//     "booking_fee": 2000.0, "transport_fee": 0.0, "total_amount": 2000.0,
+//     "qr_token": "...", "qr_expires_at": "...",
+//     "slot_starts_at": "2026-09-28T08:00:00+00:00",
+//     "registration_number": "CI-123-AB",
+//     "vehicle_brand": "Toyota", "vehicle_model": "Corolla",
+//     "vehicle_color": "Blanc", "vehicle_category": "VP",
+//     "center_id": "...", "center_name": "...", "center_address": "...",
+//     "center_city": "Abidjan", "center_contact_phone": "+225...",
+//     "vt_result": "favorable" | null,
+//     "vt_report_notes": "...", "vt_completed_at": "...",
+//     "next_vt_due_date": "2027-09-28"
+//   }
+// On tolère aussi le format imbriqué {vehicle:{...}, center:{...}}.
 
 class CtBookingModel {
   final String id;
@@ -372,6 +411,16 @@ class CtBookingModel {
       qrExpiresAt != null &&
       qrExpiresAt!.isAfter(DateTime.now());
 
+  bool get isPendingPayment => status == 'pending_payment';
+  bool get isConfirmed      => status == 'confirmed';
+  bool get isCompleted      => status == 'completed';
+  bool get isCancelled      => status == 'cancelled';
+  bool get isPaid           => paymentStatus == 'paid';
+
+  bool get canPay =>
+      isPendingPayment &&
+      (slotReservedUntil == null || slotReservedUntil!.isAfter(DateTime.now()));
+
   static double _dbl(dynamic v) {
     if (v == null) return 0;
     if (v is num) return v.toDouble();
@@ -381,23 +430,14 @@ class CtBookingModel {
   static DateTime? _dt(dynamic v) =>
       v == null ? null : DateTime.tryParse(v.toString());
 
-  // FIX CRITIQUE : le backend (formatBooking) retourne les champs à plat :
-  //   vehicle_brand, vehicle_model, registration_number, vehicle_color,
-  //   vehicle_category, center_id, center_name, center_address,
-  //   session_date, slot_starts_at.
-  // On accepte les DEUX formats : objet imbriqué (vehicle{}, center{})
-  // ET colonnes à plat — pour rester compatible quelle que soit l'évolution
-  // de l'API.
   factory CtBookingModel.fromJson(Map<String, dynamic> json) {
     // ── Véhicule ──────────────────────────────────────────────────────────
     final VehicleModel vehicle;
     if (json['vehicle'] is Map) {
-      // Format imbriqué : {"vehicle": {"id": ..., "brand": ...}}
       vehicle = VehicleModel.fromJson(json['vehicle'] as Map<String, dynamic>);
     } else {
-      // Format plat renvoyé par formatBooking/bookingSelectColumns
       vehicle = VehicleModel(
-        id:                 (json['vehicle_id'] ?? json['id'] ?? '').toString(),
+        id:                 (json['vehicle_id'] ?? '').toString(),
         userId:             '',
         registrationNumber: (json['registration_number'] ?? '').toString(),
         brand:              (json['vehicle_brand'] ?? '').toString(),
@@ -411,10 +451,8 @@ class CtBookingModel {
     // ── Centre ────────────────────────────────────────────────────────────
     final TechnicalCenterModel center;
     if (json['center'] is Map) {
-      // Format imbriqué : {"center": {"id": ..., "name": ...}}
       center = TechnicalCenterModel.fromJson(json['center'] as Map<String, dynamic>);
     } else {
-      // Format plat renvoyé par formatBooking/bookingSelectColumns
       center = TechnicalCenterModel(
         id:           (json['center_id'] ?? '').toString(),
         operatorId:   '',
@@ -423,6 +461,7 @@ class CtBookingModel {
         type:         'fixed',
         address:      json['center_address']?.toString(),
         city:         (json['center_city'] ?? 'Abidjan').toString(),
+        contactPhone: json['center_contact_phone']?.toString(),
         openingTime:  '07:00',
         closingTime:  '17:00',
         dailyCapacity: 20,
@@ -430,18 +469,7 @@ class CtBookingModel {
       );
     }
 
-    // ── Date du créneau ───────────────────────────────────────────────────
-    // Le backend peut renvoyer slot_starts_at (datetime) ou
-    // session_date + slot_starts_at (time séparé).
-    DateTime slotStartsAt = DateTime.now();
-    if (json['slot_starts_at'] != null) {
-      slotStartsAt = _dt(json['slot_starts_at']) ?? DateTime.now();
-    } else if (json['session_date'] != null) {
-      // Reconstituer depuis session_date "2025-03-15" + start_time "08:00"
-      final datePart = json['session_date'].toString();
-      final timePart = (json['start_time'] ?? json['slot_time'] ?? '00:00').toString();
-      slotStartsAt = _dt('${datePart}T$timePart:00') ?? DateTime.now();
-    }
+    final slotStartsAt = _dt(json['slot_starts_at']) ?? DateTime.now();
 
     return CtBookingModel(
       id:                  (json['id'] ?? '').toString(),
@@ -451,7 +479,8 @@ class CtBookingModel {
       slotStartsAt:        slotStartsAt,
       slotReservedUntil:   _dt(json['slot_reserved_until']),
       transportMode:       (json['transport_mode'] ?? 'self').toString(),
-      keyHandoverAccepted: json['key_handover_accepted'] == true || json['key_handover_accepted'] == 1,
+      keyHandoverAccepted: json['key_handover_accepted'] == true ||
+                           json['key_handover_accepted'] == 1,
       bookingFee:          _dbl(json['booking_fee']),
       transportFee:        _dbl(json['transport_fee']),
       totalAmount:         _dbl(json['total_amount']),
@@ -460,7 +489,7 @@ class CtBookingModel {
       paidAt:              _dt(json['paid_at']),
       qrToken:             json['qr_token']?.toString(),
       qrExpiresAt:         _dt(json['qr_expires_at']),
-      status:              (json['status'] ?? 'pending').toString(),
+      status:              (json['status'] ?? 'pending_payment').toString(),
       vtResult:            json['vt_result']?.toString(),
       vtReportNotes:       json['vt_report_notes']?.toString(),
       vtCompletedAt:       _dt(json['vt_completed_at']),

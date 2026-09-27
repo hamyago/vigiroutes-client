@@ -1,3 +1,25 @@
+// lib/core/services/ct_service.dart
+// ─────────────────────────────────────────────────────────────────────────────
+// Service du module CT (véhicules, centres, créneaux, réservations).
+//
+// ⚠️ CONTRAT BACKEND (validé le 28/09/2026) :
+//   - GET    /ct/vehicles                → {data: [VehicleModel]}
+//   - POST   /ct/vehicles                → {data: VehicleModel}   (201)
+//   - PATCH  /ct/vehicles/{id}           → {data: VehicleModel}
+//   - DELETE /ct/vehicles/{id}           → {message: "..."}
+//   - GET    /ct/centers?date=...        → {data: [TechnicalCenterModel]}
+//   - GET    /ct/centers/{id}/slots?date → {data: [SessionSlotModel]}
+//   - GET    /ct/bookings                → {data: [CtBookingModel]}
+//   - POST   /ct/bookings                → {data: CtBookingModel}   (201)
+//   - GET    /ct/bookings/{id}           → {data: CtBookingModel}
+//   - POST   /ct/bookings/{id}/cancel    → {message: "..."}
+//   - POST   /ct/bookings/{id}/pay       → {message, qr_token?, payment_url?}
+//   - GET    /ct/bookings/{id}/qr        → {data: {qr_token: "..."}}
+//
+// Le filtre `operator_ids[]` sur /ct/centers est maintenant pris en compte
+// par le backend (voir CtController::centersIndex()).
+// ─────────────────────────────────────────────────────────────────────────────
+
 import 'api_service.dart';
 import '../models/vehicle_model.dart';
 
@@ -9,35 +31,84 @@ class CtService {
 
   static const _base = 'https://api.vigiroutes.com/api';
 
-  // ── Véhicules ──────────────────────────────────────────────────────────────
+  // ── Helpers internes ─────────────────────────────────────────────────────
 
+  /// Extrait une liste depuis une réponse JSON Laravel.
+  /// Tolère les formats {data: [...]}, {vehicles: [...]}, [...].
+  List<dynamic> _extractList(dynamic raw, {String? key}) {
+    if (raw is List) return raw;
+    if (raw is Map) {
+      if (key != null && raw[key] is List) return raw[key] as List;
+      if (raw['data'] is List) return raw['data'] as List;
+      if (raw['vehicles'] is List) return raw['vehicles'] as List;
+    }
+    return const [];
+  }
+
+  /// Extrait un objet depuis une réponse JSON Laravel.
+  /// Tolère les formats {data: {...}} et {...}.
+  Map<String, dynamic> _extractObject(dynamic raw, {String? key}) {
+    if (raw is Map<String, dynamic>) {
+      if (key != null && raw[key] is Map) {
+        return Map<String, dynamic>.from(raw[key] as Map);
+      }
+      if (raw['data'] is Map) {
+        return Map<String, dynamic>.from(raw['data'] as Map);
+      }
+      return raw;
+    }
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    throw FormatException(
+      'Réponse API inattendue : ${raw.runtimeType}',
+      raw is Object ? raw.toString() : null,
+    );
+  }
+
+  // ── Véhicules ──────────────────────────────────────────────────────────
+
+  /// GET /ct/vehicles
+  /// Retourne tous les véhicules du client connecté.
   Future<List<VehicleModel>> getVehicles() async {
     final res = await _api.get('/ct/vehicles');
-    final raw = res.data;
-    final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
-    if (list == null) return [];
+    final list = _extractList(res.data, key: 'data');
     return list
         .whereType<Map<String, dynamic>>()
-        .map((e) => VehicleModel.fromJson(e))
+        .map(VehicleModel.fromJson)
         .toList();
   }
 
+  /// POST /ct/vehicles
+  /// Crée un nouveau véhicule (fiche CT complète).
   Future<VehicleModel> createVehicle(Map<String, dynamic> data) async {
     final res = await _api.post('/ct/vehicles', data: data);
-    return VehicleModel.fromJson(res.data['data'] as Map<String, dynamic>);
+    final obj = _extractObject(res.data, key: 'data');
+    return VehicleModel.fromJson(obj);
   }
 
+  /// PATCH /ct/vehicles/{id}
+  /// Met à jour un véhicule existant.
   Future<VehicleModel> updateVehicle(String id, Map<String, dynamic> data) async {
     final res = await _api.patch('/ct/vehicles/$id', data: data);
-    return VehicleModel.fromJson(res.data['data'] as Map<String, dynamic>);
+    final obj = _extractObject(res.data, key: 'data');
+    return VehicleModel.fromJson(obj);
   }
 
+  /// DELETE /ct/vehicles/{id}
   Future<void> deleteVehicle(String id) async {
     await _api.delete('/ct/vehicles/$id');
   }
 
-  // ── Centres techniques ─────────────────────────────────────────────────────
+  // ── Centres techniques ─────────────────────────────────────────────────
 
+  /// GET /ct/centers
+  ///
+  /// Paramètres :
+  ///   - [date] : YYYY-MM-DD (défaut : aujourd'hui)
+  ///   - [lat], [lng] : position pour tri par distance (optionnel)
+  ///   - [operatorIds] : filtre sur les opérateurs (utilisé après acceptation
+  ///     d'un devis — ne garde que les centres proposés)
   Future<List<TechnicalCenterModel>> getCenters({
     String? date,
     double? lat,
@@ -49,39 +120,43 @@ class CtService {
       if (lat != null) 'lat': lat,
       if (lng != null) 'lng': lng,
     };
-    // Pass operator IDs as operator_ids[] for Laravel array param parsing
+
+    // Format Laravel attendu : operator_ids[]=aaa&operator_ids[]=bbb
+    // Dio sérialise correctement un List<String> comme tableau PHP.
     if (operatorIds != null && operatorIds.isNotEmpty) {
-      for (var i = 0; i < operatorIds.length; i++) {
-        params['operator_ids[$i]'] = operatorIds[i];
-      }
+      params['operator_ids'] = operatorIds;
     }
+
     final res = await _api.get('/ct/centers', params: params);
-    final raw = res.data;
-    final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
-    if (list == null) return [];
+    final list = _extractList(res.data, key: 'data');
     return list
         .whereType<Map<String, dynamic>>()
-        .map((e) => TechnicalCenterModel.fromJson(e))
+        .map(TechnicalCenterModel.fromJson)
         .toList();
   }
 
+  /// GET /ct/centers/{id}/slots
+  /// Liste les créneaux disponibles d'un centre pour une date.
   Future<List<SessionSlotModel>> getAvailableSlots(
-      String centerId, String date) async {
+    String centerId,
+    String date,
+  ) async {
     final res = await _api.get(
       '/ct/centers/$centerId/slots',
       params: {'date': date},
     );
-    final raw = res.data;
-    final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
-    if (list == null) return [];
+    final list = _extractList(res.data, key: 'data');
     return list
         .whereType<Map<String, dynamic>>()
-        .map((e) => SessionSlotModel.fromJson(e))
+        .map(SessionSlotModel.fromJson)
         .toList();
   }
 
-  // ── Réservations ───────────────────────────────────────────────────────────
+  // ── Réservations ───────────────────────────────────────────────────────
 
+  /// POST /ct/bookings
+  /// Crée une réservation. Statut initial : `pending_payment`.
+  /// Le paiement réel se fait ensuite via [initiatePayment].
   Future<CtBookingModel> initiateBooking({
     required String vehicleId,
     required String sessionId,
@@ -90,15 +165,17 @@ class CtService {
     final res = await _api.post('/ct/bookings', data: {
       'vehicle_id': vehicleId,
       'session_id': sessionId,
-      if (transportOption != null) 'transport_option': transportOption,
+      if (transportOption != null) 'transport_mode': transportOption,
     });
-    return CtBookingModel.fromJson(res.data['data'] as Map<String, dynamic>);
+    final obj = _extractObject(res.data, key: 'data');
+    return CtBookingModel.fromJson(obj);
   }
 
-  /// Lance le paiement DigitalPaye.
+  /// POST /ct/bookings/{id}/pay
   ///
+  /// Lance le paiement DigitalPaye.
   /// [phone] est obligatoire pour Wave, Orange Money et MTN Money.
-  /// Il est ignoré pour la carte bancaire.
+  /// Ignoré pour `card`.
   Future<Map<String, dynamic>> initiatePayment(
     String bookingId, {
     required String paymentMethod,
@@ -114,27 +191,30 @@ class CtService {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  /// GET /ct/bookings
+  /// Liste toutes les réservations du client.
   Future<List<CtBookingModel>> getMyBookings() async {
     final res = await _api.get('/ct/bookings');
-    final raw = res.data;
-    final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
-    if (list == null) return [];
+    final list = _extractList(res.data, key: 'data');
     return list
         .whereType<Map<String, dynamic>>()
-        .map((e) => CtBookingModel.fromJson(e))
+        .map(CtBookingModel.fromJson)
         .toList();
   }
 
+  /// GET /ct/bookings/{id}
   Future<CtBookingModel> getBooking(String bookingId) async {
     final res = await _api.get('/ct/bookings/$bookingId');
-    return CtBookingModel.fromJson(res.data['data'] as Map<String, dynamic>);
+    final obj = _extractObject(res.data, key: 'data');
+    return CtBookingModel.fromJson(obj);
   }
 
+  /// POST /ct/bookings/{id}/cancel
   Future<void> cancelBooking(String bookingId) async {
     await _api.post('/ct/bookings/$bookingId/cancel');
   }
 
-  // ── QR Code ────────────────────────────────────────────────────────────────
+  // ── QR Code ────────────────────────────────────────────────────────────
 
   /// URL de l'image QR code pour un booking confirmé (bearer auth via header).
   String qrCodeUrl(String bookingId) =>
