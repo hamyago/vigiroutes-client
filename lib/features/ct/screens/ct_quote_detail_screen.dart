@@ -80,7 +80,7 @@ class _CtQuoteDetailScreenState extends State<CtQuoteDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Devis refusé.'), backgroundColor: AppColors.textSecondary),
         );
-        context.pop();
+        context.go('/ct/quotes');
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
