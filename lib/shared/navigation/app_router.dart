@@ -276,7 +276,10 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
               }
               // Extraire le bookingHint depuis l'extra (après acceptation d'un devis CT)
               final extra = s.extra as Map<String, dynamic>?;
-              final hint = extra?['booking_hint'] as CtBookingHint?;
+              final hintRaw = extra?['booking_hint'];
+              final hint = hintRaw is Map<String, dynamic>
+                  ? CtBookingHint.fromJson(hintRaw)
+                  : null;
               return ChangeNotifierProvider(
                 create: (_) => CtBookingController(),
                 child: CtBookingFlowScreen(bookingHint: hint),

@@ -102,7 +102,15 @@ class _CtQuoteDetailScreenState extends State<CtQuoteDetailScreen> {
       if (decision == 'accepted' && ctrl.bookingHint != null) {
         context.push(
           '/ct/booking',
-          extra: {'booking_hint': ctrl.bookingHint},
+          extra: {
+              'booking_hint': {
+                'vehicle_id':     ctrl.bookingHint!.vehicleId,
+                'quote_id':       ctrl.bookingHint!.quoteId,
+                'operator_ids':   ctrl.bookingHint!.operatorIds,
+                'amount':         ctrl.bookingHint!.amount,
+                'transport_mode': ctrl.bookingHint!.transportMode,
+              },
+            },
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
