@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +8,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../controllers/ct_booking_controller.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/ct_quote_model.dart';
-import '../../../core/services/ct_service.dart';
 
 class CtBookingFlowScreen extends StatefulWidget {
   /// bookingHint optionnel : passé via extra quand on arrive depuis l'acceptation d'un devis CT.

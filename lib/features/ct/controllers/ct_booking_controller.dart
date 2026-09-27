@@ -152,11 +152,15 @@ class CtBookingController extends ChangeNotifier {
 
   void selectDate(DateTime d) {
     _selectedDate = d;
+    // Réinitialiser la sélection de créneau quand la date change
+    _selectedSlot = null;
     notifyListeners();
     final dateStr =
         '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    // loadCenters rechargera avec le filtre operator_ids si on vient d'un devis
     loadCenters(date: dateStr);
-    loadSlots(dateStr);
+    // loadSlots ne s'exécute que si un centre est déjà sélectionné
+    if (_selectedCenter != null) loadSlots(dateStr);
   }
 
   // ── Transport mode ────────────────────────────────────────────────────────
@@ -209,11 +213,16 @@ class CtBookingController extends ChangeNotifier {
   double get towFee    => fromHint ? 0 : 5000;   // déjà inclus dans hint.amount
   double get driverFee => fromHint ? 0 : 8000;
 
-  /// Frais de contrôle : depuis la réservation active si disponible,
-  /// sinon depuis le devis accepté, sinon valeur par défaut.
+  /// Frais de contrôle : depuis la réservation active si disponible ET non nul,
+  /// sinon depuis le devis accepté (hintAmount), sinon valeur par défaut.
   double get bookingFee {
+    // Quand on vient d'un devis, le montant du devis est la référence principale.
+    // On l'utilise si le backend ne renvoie pas de booking_fee dans la réponse.
+    if (_activeBooking != null && _activeBooking!.bookingFee > 0) {
+      return _activeBooking!.bookingFee;
+    }
+    if (_hintAmount > 0) return _hintAmount.toDouble();
     if (_activeBooking != null) return _activeBooking!.bookingFee;
-    if (fromHint && _hintAmount > 0) return _hintAmount.toDouble();
     return 15000;
   }
 
@@ -221,16 +230,22 @@ class CtBookingController extends ChangeNotifier {
   /// sinon calculé selon le mode.
   double get transportFee {
     if (fromHint) return 0; // inclus dans le montant du devis
-    return _activeBooking?.transportFee ??
-        (_transportMode == 'tow'
-            ? towFee
-            : _transportMode == 'driver'
-                ? driverFee
-                : 0);
+    if (_activeBooking != null && _activeBooking!.transportFee > 0) {
+      return _activeBooking!.transportFee;
+    }
+    return _transportMode == 'tow'
+        ? towFee
+        : _transportMode == 'driver'
+            ? driverFee
+            : 0;
   }
 
-  double get totalAmount =>
-      _activeBooking?.totalAmount ?? (bookingFee + transportFee);
+  double get totalAmount {
+    if (_activeBooking != null && _activeBooking!.totalAmount > 0) {
+      return _activeBooking!.totalAmount;
+    }
+    return bookingFee + transportFee;
+  }
 
   // ── Payment ───────────────────────────────────────────────────────────────
   String? _paymentMethod;
@@ -406,10 +421,17 @@ class CtBookingController extends ChangeNotifier {
     _error = null;
     if (!_disposed) notifyListeners();
     try {
+      // Quand on vient d'un devis, on passe les operator_ids au backend
+      // pour ne récupérer que les centres proposés dans le devis.
+      final operatorIds = (_bookingHint != null && _bookingHint!.operatorIds.isNotEmpty)
+          ? _bookingHint!.operatorIds
+          : null;
+
       _centers = await CtService.instance.getCenters(
         date: date,
         lat: lat,
         lng: lng,
+        operatorIds: operatorIds,
       );
       if (!_disposed) {
         _buildMapMarkers();

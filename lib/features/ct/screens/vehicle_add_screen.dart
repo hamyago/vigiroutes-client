@@ -11,8 +11,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import '../../core/models/vehicle_model.dart';
-import '../../core/services/ct_service.dart';
+import '../../../core/models/vehicle_model.dart';
+import '../../../core/services/ct_service.dart';
 
 class VehicleAddScreen extends StatefulWidget {
   /// Passer un véhicule existant pour passer en mode édition.

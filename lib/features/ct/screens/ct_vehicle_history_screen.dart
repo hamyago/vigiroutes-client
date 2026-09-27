@@ -13,7 +13,7 @@ class CtVehicleHistoryScreen extends StatefulWidget {
 class _CtVehicleHistoryScreenState extends State<CtVehicleHistoryScreen> {
   List<VehicleModel> _vehicles = [];
   VehicleModel? _selected;
-  List<VehicleInterventionModel> _history = [];
+  List<CtBookingModel> _history = [];
   bool _loadingVehicles = true;
   bool _loadingHistory = false;
   String? _error;
@@ -27,13 +27,15 @@ class _CtVehicleHistoryScreenState extends State<CtVehicleHistoryScreen> {
   Future<void> _loadVehicles() async {
     setState(() { _loadingVehicles = true; _error = null; });
     try {
-      final list = await CtService.instance.getMyVehicles();
+      final list = await CtService.instance.getVehicles();
+      if (!mounted) return;
       setState(() {
         _vehicles = list;
         _loadingVehicles = false;
         if (list.isNotEmpty) _selectVehicle(list.first);
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _error = e.toString(); _loadingVehicles = false; });
     }
   }
@@ -41,9 +43,15 @@ class _CtVehicleHistoryScreenState extends State<CtVehicleHistoryScreen> {
   Future<void> _selectVehicle(VehicleModel v) async {
     setState(() { _selected = v; _loadingHistory = true; _history = []; _error = null; });
     try {
-      final h = await CtService.instance.getVehicleHistory(v.id);
-      setState(() { _history = h; _loadingHistory = false; });
+      // Charge toutes les réservations CT et filtre par véhicule
+      final all = await CtService.instance.getMyBookings();
+      if (!mounted) return;
+      setState(() {
+        _history = all.where((b) => b.vehicle.id == v.id).toList();
+        _loadingHistory = false;
+      });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _error = e.toString(); _loadingHistory = false; });
     }
   }
@@ -51,12 +59,22 @@ class _CtVehicleHistoryScreenState extends State<CtVehicleHistoryScreen> {
   String _formatDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 
-  String _typeLabel(String type) {
-    switch (type) {
-      case 'ct': return 'Contrôle Technique';
-      case 'repair': return 'Réparation';
-      case 'maintenance': return 'Entretien';
-      default: return type;
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'confirmed': return 'Confirmé';
+      case 'pending':   return 'En attente';
+      case 'cancelled': return 'Annulé';
+      case 'completed': return 'Terminé';
+      default:          return status;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'confirmed': return Colors.green;
+      case 'cancelled': return AppColors.error;
+      case 'completed': return AppColors.primary;
+      default:          return AppColors.textSecondary;
     }
   }
 
@@ -140,12 +158,12 @@ class _CtVehicleHistoryScreenState extends State<CtVehicleHistoryScreen> {
                                     child: ListView.builder(
                                       padding: const EdgeInsets.all(16),
                                       itemCount: _history.length,
-                                      itemBuilder: (_, i) =>
-                                          _InterventionCard(
-                                            item: _history[i],
-                                            typeLabel: _typeLabel(_history[i].type),
-                                            formatDate: _formatDate,
-                                          ),
+                                      itemBuilder: (_, i) => _BookingCard(
+                                        booking: _history[i],
+                                        statusLabel: _statusLabel(_history[i].status),
+                                        statusColor: _statusColor(_history[i].status),
+                                        formatDate: _formatDate,
+                                      ),
                                     )),
                   ),
                 ]),
@@ -153,14 +171,16 @@ class _CtVehicleHistoryScreenState extends State<CtVehicleHistoryScreen> {
   }
 }
 
-class _InterventionCard extends StatelessWidget {
-  final VehicleInterventionModel item;
-  final String typeLabel;
+class _BookingCard extends StatelessWidget {
+  final CtBookingModel booking;
+  final String statusLabel;
+  final Color statusColor;
   final String Function(DateTime) formatDate;
 
-  const _InterventionCard({
-    required this.item,
-    required this.typeLabel,
+  const _BookingCard({
+    required this.booking,
+    required this.statusLabel,
+    required this.statusColor,
     required this.formatDate,
   });
 
@@ -179,32 +199,33 @@ class _InterventionCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppColors.primaryLight,
+              color: statusColor.withAlpha(26),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text(typeLabel,
-                style: const TextStyle(
-                    color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+            child: Text(statusLabel,
+                style: TextStyle(
+                    color: statusColor, fontSize: 11, fontWeight: FontWeight.w600)),
           ),
           const Spacer(),
-          if (item.performedAt != null)
-            Text(formatDate(item.performedAt!),
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+          Text(formatDate(booking.slotStartsAt),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
         ]),
         const SizedBox(height: 10),
-        Text(item.providerName,
+        Text(booking.center.name,
             style: const TextStyle(
                 fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary)),
-        const SizedBox(height: 2),
-        Text(item.locationName,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+        if (booking.center.address != null) ...[
+          const SizedBox(height: 2),
+          Text(booking.center.address!,
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+        ],
         const SizedBox(height: 8),
         Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Résultat',
+              const Text('Résultat VT',
                   style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
-              Text(item.result ?? 'En attente',
+              Text(booking.vtResult ?? 'En attente',
                   style: const TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 13,
@@ -215,50 +236,16 @@ class _InterventionCard extends StatelessWidget {
             const Text('Montant',
                 style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
             Text(
-              item.amount != null
-                  ? '${item.amount!.toStringAsFixed(0)} ${item.currency ?? 'FCFA'}'
-                  : 'N/A',
+              '${booking.totalAmount.toStringAsFixed(0)} FCFA',
               style: const TextStyle(
                   color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700),
             ),
           ]),
         ]),
-        if (item.notes != null && item.notes!.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(item.notes!,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          ),
-        ],
-        if (item.photos.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 70,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: item.photos.length,
-              itemBuilder: (_, j) => Container(
-                margin: const EdgeInsets.only(right: 8),
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
-                  image: DecorationImage(
-                    image: NetworkImage(item.photos[j]),
-                    fit: BoxFit.cover,
-                    onError: (_, __) {},
-                  ),
-                ),
-              ),
-            ),
-          ),
+        if (booking.reference.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text('Réf : ${booking.reference}',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
         ],
       ]),
     );

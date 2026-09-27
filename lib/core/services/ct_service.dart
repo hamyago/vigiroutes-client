@@ -42,12 +42,20 @@ class CtService {
     String? date,
     double? lat,
     double? lng,
+    List<String>? operatorIds,
   }) async {
-    final res = await _api.get('/ct/centers', params: {
+    final Map<String, dynamic> params = {
       if (date != null) 'date': date,
       if (lat != null) 'lat': lat,
       if (lng != null) 'lng': lng,
-    });
+    };
+    // Pass operator IDs as operator_ids[] for Laravel array param parsing
+    if (operatorIds != null && operatorIds.isNotEmpty) {
+      for (var i = 0; i < operatorIds.length; i++) {
+        params['operator_ids[$i]'] = operatorIds[i];
+      }
+    }
+    final res = await _api.get('/ct/centers', params: params);
     final raw = res.data;
     final list = raw is Map ? (raw['data'] as List?) : (raw as List?);
     if (list == null) return [];

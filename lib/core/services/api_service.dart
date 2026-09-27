@@ -202,7 +202,7 @@ class ApiService {
 
   Future<bool> updateInterventionStatus(String id, String status) async {
     try {
-      await post('/user/interventions/$id/cancel', data: {'reason': status});
+      await patch('/user/interventions/$id', data: {'status': status});
       return true;
     } catch (_) {
       return false;

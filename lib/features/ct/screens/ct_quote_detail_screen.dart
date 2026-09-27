@@ -53,6 +53,9 @@ class _CtQuoteDetailScreenState extends State<CtQuoteDetailScreen> {
 
   Future<void> _respond(BuildContext context, String decision) async {
     final ctrl = context.read<CtQuoteController>();
+    // Capture les références context-dépendantes AVANT tout await
+    final router    = GoRouter.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -100,26 +103,26 @@ class _CtQuoteDetailScreenState extends State<CtQuoteDetailScreen> {
 
     if (ok) {
       if (decision == 'accepted' && ctrl.bookingHint != null) {
-        context.push(
+        router.push(
           '/ct/booking',
           extra: {
-              'booking_hint': {
-                'vehicle_id':     ctrl.bookingHint!.vehicleId,
-                'quote_id':       ctrl.bookingHint!.quoteId,
-                'operator_ids':   ctrl.bookingHint!.operatorIds,
-                'amount':         ctrl.bookingHint!.amount,
-                'transport_mode': ctrl.bookingHint!.transportMode,
-              },
+            'booking_hint': {
+              'vehicle_id':     ctrl.bookingHint!.vehicleId,
+              'quote_id':       ctrl.bookingHint!.quoteId,
+              'operator_ids':   ctrl.bookingHint!.operatorIds,
+              'amount':         ctrl.bookingHint!.amount,
+              'transport_mode': ctrl.bookingHint!.transportMode,
             },
+          },
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(content: Text('Devis refusé.'), backgroundColor: AppColors.textSecondary),
         );
-        context.pop();
+        router.pop();
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text(ctrl.respondError ?? 'Erreur'), backgroundColor: AppColors.error),
       );
     }
