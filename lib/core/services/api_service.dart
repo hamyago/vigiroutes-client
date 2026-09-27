@@ -290,7 +290,8 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> updateVehicle(String id, Map<String, dynamic> data) async {
-    final res = await patch('/user/vehicles/$id', data: data);
+    // On ajoute _method=PUT pour le spoofing Laravel (qui n'accepte pas PATCH natif sur certaines configs)
+    final res = await post('/user/vehicles/$id', data: {'_method': 'PUT', ...data});
     final d = res.data;
     if (d is Map && d['vehicle'] is Map) {
       return Map<String, dynamic>.from(d['vehicle'] as Map);

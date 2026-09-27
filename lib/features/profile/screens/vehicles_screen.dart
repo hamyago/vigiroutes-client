@@ -671,14 +671,22 @@ class _VehicleSheetState extends State<_VehicleSheet> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final screenH = MediaQuery.of(context).size.height;
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.fromLTRB(20, 20, 20, bottom + 24),
-      child: SingleChildScrollView(
-        child: Form(
+      // Hauteur max = 92 % de l'écran pour ne jamais dépasser
+      constraints: BoxConstraints(maxHeight: screenH * 0.92),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Zone scrollable qui pousse le clavier vers le haut
+          Flexible(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, bottom + 24),
+              child: Form(
           key: _formKey,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             // Poignée
@@ -858,9 +866,14 @@ class _VehicleSheetState extends State<_VehicleSheet> {
             ),
 
             const SizedBox(height: 24),
-
-            // ── Bouton enregistrer ──
-            SizedBox(
+          ]), // fin Column du Form
+        ), // fin Form
+      ), // fin SingleChildScrollView
+          ), // fin Flexible
+          // ── Bouton enregistrer — toujours visible hors du scroll ──
+          Padding(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, bottom + 20),
+            child: SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
@@ -881,8 +894,8 @@ class _VehicleSheetState extends State<_VehicleSheet> {
                             fontSize: 16, fontWeight: FontWeight.w600)),
               ),
             ),
-          ]),
-        ),
+          ),
+        ],
       ),
     );
   }
