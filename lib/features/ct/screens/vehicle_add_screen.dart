@@ -35,6 +35,7 @@ class _VehicleAddScreenState extends State<VehicleAddScreen> {
   late final TextEditingController _marqueCtrl;
   late final TextEditingController _typeCtrl;
   late final TextEditingController _puissanceCtrl;
+  late final TextEditingController _ptacCtrl;
   late final TextEditingController _couleurCtrl;
   late final TextEditingController _placesCtrl;
 
@@ -60,6 +61,8 @@ class _VehicleAddScreenState extends State<VehicleAddScreen> {
     _typeCtrl      = TextEditingController(text: v?.model ?? '');
     _puissanceCtrl = TextEditingController(
         text: v?.puissanceCv != null ? v!.puissanceCv.toString() : '');
+    _ptacCtrl      = TextEditingController(
+        text: v?.ptacTonnes != null ? v!.ptacTonnes.toString() : '');
     _couleurCtrl   = TextEditingController(text: v?.color ?? '');
     _placesCtrl    = TextEditingController(
         text: v?.placesAssises != null ? v!.placesAssises.toString() : '');
@@ -81,6 +84,7 @@ class _VehicleAddScreenState extends State<VehicleAddScreen> {
     _marqueCtrl.dispose();
     _typeCtrl.dispose();
     _puissanceCtrl.dispose();
+    _ptacCtrl.dispose();
     _couleurCtrl.dispose();
     _placesCtrl.dispose();
     _dateCTCtrl.dispose();
@@ -134,8 +138,9 @@ class _VehicleAddScreenState extends State<VehicleAddScreen> {
       'technical_visit_expires_at':  _dateCT != null
           ? DateFormat('yyyy-MM-dd').format(_dateCT!)
           : null,
-      if (_puissanceCtrl.text.trim().isNotEmpty)
-        'puissance_cv':   int.tryParse(_puissanceCtrl.text.trim()),
+      'puissance_cv':   int.tryParse(_puissanceCtrl.text.trim()),
+      if (_ptacCtrl.text.trim().isNotEmpty)
+        'ptac_tonnes':    double.tryParse(_ptacCtrl.text.trim()),
       if (_placesCtrl.text.trim().isNotEmpty)
         'places_assises': int.tryParse(_placesCtrl.text.trim()),
     };
@@ -299,13 +304,13 @@ class _VehicleAddScreenState extends State<VehicleAddScreen> {
 
               _buildField(
                 controller: _puissanceCtrl,
-                label: 'Puissance (CV)',
+                label: 'Puissance fiscale (CV) *',
                 hint: 'Ex : 5',
                 icon: Icons.speed_outlined,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 validator: (v) {
-                  if (v == null || v.trim().isEmpty) return null;
+                  if (v == null || v.trim().isEmpty) return 'Champ obligatoire';
                   final n = int.tryParse(v.trim());
                   if (n == null || n <= 0) return 'Valeur invalide';
                   return null;
@@ -314,26 +319,58 @@ class _VehicleAddScreenState extends State<VehicleAddScreen> {
               const SizedBox(height: 12),
 
               _buildField(
-                controller: _couleurCtrl,
-                label: 'Couleur',
-                hint: 'Ex : Blanc, Gris…',
-                icon: Icons.palette_outlined,
+                controller: _ptacCtrl,
+                label: 'PTAC – Poids total autorisé en charge (tonnes) *',
+                hint: 'Ex : 1.5  (≤ 3.5 = véhicule léger)',
+                icon: Icons.scale_outlined,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Champ obligatoire';
+                  final n = double.tryParse(v.trim());
+                  if (n == null || n <= 0) return 'Valeur invalide';
+                  return null;
+                },
               ),
               const SizedBox(height: 12),
 
               _buildDropdown<String?>(
                 value: _energie,
-                label: 'Énergie',
+                label: 'Type d\'énergie *',
                 icon: Icons.local_gas_station_outlined,
-                items: const [null, 'gasoil', 'essence', 'hybride', 'electrique'],
+                items: const ['gasoil', 'essence', 'hybride', 'electrique'],
                 labels: const {
-                  null:          '— Sélectionner —',
                   'gasoil':      'Gasoil',
                   'essence':     'Essence',
                   'hybride':     'Hybride',
                   'electrique':  'Électrique',
                 },
                 onChanged: (v) => setState(() => _energie = v),
+                validator: (v) => (v == null || v.isEmpty) ? 'Champ obligatoire' : null,
+              ),
+              const SizedBox(height: 12),
+
+              _buildDropdown<String?>(
+                value: _usage,
+                label: 'Type d\'usage *',
+                icon: Icons.assignment_outlined,
+                items: const ['public', 'privée'],
+                labels: const {
+                  'public': 'Usage public (transport commun)',
+                  'privée': 'Usage privé',
+                },
+                onChanged: (v) => setState(() => _usage = v),
+                validator: (v) => (v == null || v.isEmpty) ? 'Champ obligatoire' : null,
+              ),
+              const SizedBox(height: 12),
+
+              _buildField(
+                controller: _couleurCtrl,
+                label: 'Couleur',
+                hint: 'Ex : Blanc, Gris…',
+                icon: Icons.palette_outlined,
               ),
               const SizedBox(height: 12),
 
@@ -350,20 +387,6 @@ class _VehicleAddScreenState extends State<VehicleAddScreen> {
                   if (n == null || n <= 0) return 'Valeur invalide';
                   return null;
                 },
-              ),
-              const SizedBox(height: 12),
-
-              _buildDropdown<String?>(
-                value: _usage,
-                label: 'Usage',
-                icon: Icons.assignment_outlined,
-                items: const [null, 'public', 'privée'],
-                labels: const {
-                  null:     '— Sélectionner —',
-                  'public': 'Usage public',
-                  'privée': 'Usage privé',
-                },
-                onChanged: (v) => setState(() => _usage = v),
               ),
               const SizedBox(height: 24),
 

@@ -16,6 +16,7 @@ class VehicleModel {
   final int?    puissanceCv;       // Puissance fiscale en CV
   final int?    placesAssises;     // Nombre de places assises
   final String? usage;             // public | privée
+  final double? ptacTonnes;        // Poids Total Autorisé en Charge (tonnes)
 
   // Dates expiration
   final DateTime? technicalVisitExpiresAt;
@@ -43,6 +44,7 @@ class VehicleModel {
     this.puissanceCv,
     this.placesAssises,
     this.usage,
+    this.ptacTonnes,
     this.technicalVisitExpiresAt,
     this.tvDateVerified = false,
     this.insuranceExpiresAt,
@@ -73,6 +75,13 @@ class VehicleModel {
   static String _str(dynamic v, [String fallback = '']) =>
       v == null ? fallback : v.toString();
 
+  static double? _dblOrNull(dynamic v) {
+    if (v == null) return null;
+    if (v is double) return v;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
   static int? _intOrNull(dynamic v) {
     if (v == null) return null;
     if (v is int) return v;
@@ -95,6 +104,7 @@ class VehicleModel {
         puissanceCv:            _intOrNull(json['puissance_cv']),
         placesAssises:          _intOrNull(json['places_assises']),
         usage:                  json['usage']?.toString(),
+        ptacTonnes:             _dblOrNull(json['ptac_tonnes']),
         technicalVisitExpiresAt: json['technical_visit_expires_at'] != null
             ? DateTime.tryParse(json['technical_visit_expires_at'].toString())
             : null,
@@ -126,6 +136,7 @@ class VehicleModel {
         'puissance_cv':         puissanceCv,
         'places_assises':       placesAssises,
         'usage':                usage,
+        'ptac_tonnes':          ptacTonnes,
         'technical_visit_expires_at': technicalVisitExpiresAt?.toIso8601String().split('T').first,
         'insurance_expires_at': insuranceExpiresAt?.toIso8601String().split('T').first,
         'vignette_expires_at':  vignetteExpiresAt?.toIso8601String().split('T').first,
@@ -144,6 +155,7 @@ class VehicleModel {
     int?    puissanceCv,
     int?    placesAssises,
     String? usage,
+    double? ptacTonnes,
     DateTime? technicalVisitExpiresAt,
     DateTime? insuranceExpiresAt,
     DateTime? vignetteExpiresAt,
@@ -164,6 +176,7 @@ class VehicleModel {
         puissanceCv:           puissanceCv ?? this.puissanceCv,
         placesAssises:         placesAssises ?? this.placesAssises,
         usage:                 usage ?? this.usage,
+        ptacTonnes:            ptacTonnes ?? this.ptacTonnes,
         technicalVisitExpiresAt: technicalVisitExpiresAt ?? this.technicalVisitExpiresAt,
         tvDateVerified:        tvDateVerified,
         insuranceExpiresAt:    insuranceExpiresAt ?? this.insuranceExpiresAt,
