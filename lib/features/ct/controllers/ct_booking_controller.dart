@@ -104,7 +104,7 @@ class CtBookingController extends ChangeNotifier {
       return _centers;
     }
     final filtered = _centers
-        .where((c) => _bookingHint!.operatorIds.contains(c.providerId))
+        .where((c) => _bookingHint!.operatorIds.contains(c.operatorId))
         .toList();
     // Si le filtre ne donne rien (données incomplètes), on affiche tout
     return filtered.isEmpty ? _centers : filtered;
