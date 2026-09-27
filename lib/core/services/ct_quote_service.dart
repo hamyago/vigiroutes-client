@@ -44,7 +44,7 @@ class CtQuoteService {
     final res = await _api.post('/client/ct/quote-requests/$id/respond', data: {
       'decision': decision,
     });
-    final hint = res.data['data']?['booking_hint'];
+    final hint = res.data['booking_hint'] ?? res.data['data']?['booking_hint'];
     if (hint != null) {
       return CtBookingHint.fromJson(hint as Map<String, dynamic>);
     }
