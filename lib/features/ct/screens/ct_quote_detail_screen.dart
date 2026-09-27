@@ -1,8 +1,11 @@
+// lib/features/ct/screens/ct_quote_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/ct_quote_model.dart';
+import '../../../core/models/tariff_model.dart';
+import '../../../core/services/api_service.dart';
 import '../controllers/ct_quote_controller.dart';
 
 class CtQuoteDetailScreen extends StatefulWidget {
@@ -14,12 +17,38 @@ class CtQuoteDetailScreen extends StatefulWidget {
 }
 
 class _CtQuoteDetailScreenState extends State<CtQuoteDetailScreen> {
+  TariffModel? _tariff;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<CtQuoteController>().loadRequest(widget.requestId);
+      _loadTariff();
     });
+  }
+
+  Future<void> _loadTariff() async {
+    try {
+      final raw = await ApiService.instance.getTariffs();
+      // Pour le CT on cherche le tarif global (service_type_slug null)
+      // ou un tarif spécifique 'ct' s'il existe
+      final list = raw
+          .map((e) => TariffModel.fromJson(e as Map<String, dynamic>))
+          .where((t) => t.isActive)
+          .toList();
+
+      TariffModel? found = list.cast<TariffModel?>().firstWhere(
+        (t) => t?.serviceTypeSlug == 'ct',
+        orElse: () => null,
+      );
+      found ??= list.cast<TariffModel?>().firstWhere(
+        (t) => t?.serviceTypeSlug == null,
+        orElse: () => null,
+      );
+
+      if (mounted) setState(() => _tariff = found);
+    } catch (_) {}
   }
 
   Future<void> _respond(BuildContext context, String decision) async {
@@ -71,7 +100,6 @@ class _CtQuoteDetailScreenState extends State<CtQuoteDetailScreen> {
 
     if (ok) {
       if (decision == 'accepted' && ctrl.bookingHint != null) {
-        // Lancer le flux CT avec hint pré-rempli
         context.push(
           '/ct/booking',
           extra: {'booking_hint': ctrl.bookingHint},
@@ -80,7 +108,7 @@ class _CtQuoteDetailScreenState extends State<CtQuoteDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Devis refusé.'), backgroundColor: AppColors.textSecondary),
         );
-        context.go('/ct/quotes');
+        context.pop();
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -130,18 +158,22 @@ class _CtQuoteDetailScreenState extends State<CtQuoteDetailScreen> {
                 _Card(
                   title: 'Votre demande',
                   children: [
-                    _Row(label: 'Réf.', value: req.id.substring(0, 8).toUpperCase()),
-                    _Row(label: 'Transport', value: _transportLabel(req.transportMode)),
+                    _InfoRow(label: 'Réf.', value: req.id.substring(0, 8).toUpperCase()),
+                    _InfoRow(label: 'Transport', value: _transportLabel(req.transportMode)),
                     if (req.notes != null && req.notes!.isNotEmpty)
-                      _Row(label: 'Notes', value: req.notes!),
-                    _Row(label: 'Date', value: _formatDate(req.createdAt)),
+                      _InfoRow(label: 'Notes', value: req.notes!),
+                    _InfoRow(label: 'Date', value: _formatDate(req.createdAt)),
                   ],
                 ),
                 const SizedBox(height: 14),
 
                 // ── Devis reçu ────────────────────────────────────────────────
                 if (req.quote != null) ...[
-                  _QuoteSection(quote: req.quote!),
+                  _QuoteSection(
+                    quote: req.quote!,
+                    transportMode: req.transportMode,
+                    tariff: _tariff,
+                  ),
                   const SizedBox(height: 14),
                 ],
 
@@ -243,9 +275,17 @@ class _StatusBanner extends StatelessWidget {
   };
 }
 
+/// Section devis avec détail complet des frais.
 class _QuoteSection extends StatelessWidget {
   final CtQuoteModel quote;
-  const _QuoteSection({required this.quote});
+  final String transportMode;
+  final TariffModel? tariff;
+
+  const _QuoteSection({
+    required this.quote,
+    required this.transportMode,
+    this.tariff,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -259,6 +299,7 @@ class _QuoteSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // En-tête
           Row(
             children: [
               const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 20),
@@ -284,7 +325,11 @@ class _QuoteSection extends StatelessWidget {
           ),
           const Divider(height: 24),
 
-          // Montant final mis en avant
+          // ── Détail des frais ──────────────────────────────────────────────
+          _buildBreakdown(),
+
+          // Montant total mis en avant
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -303,11 +348,7 @@ class _QuoteSection extends StatelessWidget {
             ),
           ),
 
-          if (quote.baseAmount != quote.finalAmount) ...[
-            const SizedBox(height: 10),
-            _Row(label: 'Montant de base', value: '${_fmtAmount(quote.baseAmount)} FCFA'),
-          ],
-
+          // Note admin
           if (quote.adminNotes != null && quote.adminNotes!.isNotEmpty) ...[
             const SizedBox(height: 12),
             const Text('Note du conseiller', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary)),
@@ -323,6 +364,7 @@ class _QuoteSection extends StatelessWidget {
             ),
           ],
 
+          // Centres CT proposés
           if (quote.operators.isNotEmpty) ...[
             const SizedBox(height: 12),
             const Text('Centres CT proposés', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary)),
@@ -344,15 +386,89 @@ class _QuoteSection extends StatelessWidget {
     );
   }
 
+  Widget _buildBreakdown() {
+    // Priorité 1 : le backend a renvoyé le détail dans le devis
+    if (quote.hasBreakdown) {
+      final optionLabel = switch (transportMode) {
+        'tow'    => 'Option Remorquage',
+        'driver' => 'Option Chauffeur affecté',
+        _        => 'Option Déplacement autonome',
+      };
+      return Column(children: [
+        _FraisLine(label: 'Frais partenaire',      amount: quote.partnerAmount!),
+        _FraisLine(label: optionLabel,              amount: quote.optionAmount!),
+        _FraisLine(label: 'Frais service VigiRoutes', amount: quote.digitalFeeAmount!),
+        const Divider(height: 16),
+      ]);
+    }
+
+    // Priorité 2 : tarif configuré dans l'app (depuis /tariffs)
+    if (tariff != null) {
+      final fraisOption = tariff!.fraisOptionPour(transportMode);
+      final optionLabel = switch (transportMode) {
+        'tow'    => 'Option Remorquage',
+        'driver' => 'Option Chauffeur affecté',
+        _        => 'Option Déplacement autonome',
+      };
+      // Le base_amount du devis = frais partenaire
+      return Column(children: [
+        _FraisLine(label: 'Frais partenaire',         amount: quote.baseAmount),
+        _FraisLine(label: optionLabel,                 amount: fraisOption),
+        _FraisLine(label: 'Frais service VigiRoutes', amount: tariff!.fraisVigiRoutes),
+        const Divider(height: 16),
+      ]);
+    }
+
+    // Priorité 3 : aucun tarif — affichage simplifié
+    if (quote.baseAmount != quote.finalAmount) {
+      return Column(children: [
+        _FraisLine(label: 'Montant de base', amount: quote.baseAmount),
+        const Divider(height: 16),
+      ]);
+    }
+
+    return const SizedBox.shrink();
+  }
+
   String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
   String _fmtAmount(int a) {
     final s = a.toString();
     final buf = StringBuffer();
     for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
       buf.write(s[i]);
     }
     return buf.toString();
+  }
+}
+
+class _FraisLine extends StatelessWidget {
+  final String label;
+  final int amount;
+  const _FraisLine({required this.label, required this.amount});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = amount.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
+      buf.write(s[i]);
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Expanded(
+          child: Text(label,
+              style: const TextStyle(
+                  fontFamily: 'Poppins', fontSize: 13, color: AppColors.textSecondary)),
+        ),
+        Text('$buf FCFA',
+            style: const TextStyle(
+                fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 13, color: AppColors.textPrimary)),
+      ]),
+    );
   }
 }
 
@@ -425,10 +541,10 @@ class _Card extends StatelessWidget {
       );
 }
 
-class _Row extends StatelessWidget {
+class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
-  const _Row({required this.label, required this.value});
+  const _InfoRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) => Padding(

@@ -197,7 +197,10 @@ class RequestController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> submitRequest({required UserModel user}) async {
+  Future<bool> submitRequest({
+    required UserModel user,
+    String transportMode = 'self',
+  }) async {
     if (_selectedService == null || _userPosition == null) return false;
     // En mode manuel, un prestataire est requis ; en mode auto, non.
     if (_mode == RequestMode.manual && _selectedProvider == null) return false;
@@ -216,6 +219,7 @@ class RequestController extends ChangeNotifier {
         'user_longitude':    _userPosition!.longitude,
         'user_address':      _userAddress,
         'payment_method':    _paymentMethod,
+        'transport_mode':    transportMode,
       }).timeout(const Duration(seconds: 30));
 
       _createdInterventionId = data['id'] as String;

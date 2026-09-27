@@ -368,4 +368,18 @@ class ApiService {
       return [];
     }
   }
+
+  // ── Tarifs ────────────────────────────────────────────────────────────────
+
+  /// Récupère tous les tarifs actifs (lecture seule côté client).
+  Future<List<dynamic>> getTariffs() async {
+    try {
+      final res = await get('/tariffs');
+      final d = res.data;
+      if (d is Map && d['data'] is List) return d['data'] as List;
+      return (d as List?) ?? [];
+    } catch (_) {
+      return [];
+    }
+  }
 }

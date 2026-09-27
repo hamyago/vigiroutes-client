@@ -1,3 +1,4 @@
+// lib/features/request/screens/request_screen.dart
 import 'dart:async';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -9,6 +10,7 @@ import '../../auth/controllers/auth_controller.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/models.dart';
 import '../../../core/models/service_type_model.dart';
+import '../../../core/models/tariff_model.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/service_type_service.dart';
 import '../../../core/utils/price_calculator.dart';
@@ -43,12 +45,6 @@ class _RequestScreenState extends State<RequestScreen> {
   Timer? _searchTimeoutTimer;
   String? _searchingInterventionId;
 
-  // FIX Bug C : etat "prestataire trouve" pour afficher la page de confirmation
-  // Avant ce fix : quand FCM intervention_update(accepted) arrivait,
-  // _cancelSearch() mettait _isSearching=false et le body revenait sur
-  // _ConfirmStep (le formulaire pre-soumission), completement vide visuellement.
-  // Maintenant : on passe par _ProviderFoundView qui affiche les infos
-  // du prestataire et un bouton "Suivre" vers /user/tracking/$id.
   bool    _providerFound         = false;
   String? _foundInterventionId;
 
@@ -86,8 +82,6 @@ class _RequestScreenState extends State<RequestScreen> {
       if (status == 'accepted' ||
           status == 'dispatched' ||
           status == 'en_route') {
-        // FIX Bug C : ne pas naviguer immediatement — afficher la
-        // page de confirmation d'abord, avec le bouton "Suivre".
         _cancelSearch();
         if (id != null && mounted) {
           setState(() {
@@ -230,7 +224,6 @@ class _RequestScreenState extends State<RequestScreen> {
           icon: const Icon(Icons.arrow_back_ios_new),
           onPressed: () {
             if (_providerFound) {
-              // Reset l'etat et retourner a l'accueil
               setState(() {
                 _providerFound       = false;
                 _foundInterventionId = null;
@@ -254,10 +247,6 @@ class _RequestScreenState extends State<RequestScreen> {
           child: _StepIndicator(step: ctrl.step),
         ),
       ),
-      // FIX Bug C : trois etats possibles pour le body :
-      //   1. _isSearching      → spinner "Recherche en cours"
-      //   2. _providerFound    → page de confirmation prestataire
-      //   3. sinon             → etapes normales du formulaire
       body: _isSearching
           ? _SearchingProviderView(onCancel: _cancelSearch)
           : _providerFound
@@ -293,8 +282,6 @@ class _RequestScreenState extends State<RequestScreen> {
 }
 
 // ── FIX Bug C : page de confirmation prestataire trouve ──────────────────────
-// Affichee quand FCM intervention_update(accepted) arrive pendant la recherche.
-// Remplace le formulaire vide qui s'affichait avant ce fix.
 class _ProviderFoundView extends StatelessWidget {
   final String interventionId;
   final VoidCallback onTrack;
@@ -677,13 +664,56 @@ class _SelectProviderStepState extends State<_SelectProviderStep> {
 
 // ── Step 3: Confirm ───────────────────────────────────────────────────────────
 
-class _ConfirmStep extends StatelessWidget {
+class _ConfirmStep extends StatefulWidget {
   final RequestController ctrl;
   final void Function(String interventionId)? onSubmitted;
   const _ConfirmStep({required this.ctrl, this.onSubmitted});
 
   @override
+  State<_ConfirmStep> createState() => _ConfirmStepState();
+}
+
+class _ConfirmStepState extends State<_ConfirmStep> {
+  // Mode de transport sélectionné par le client
+  // 'self' = je me déplace | 'tow' = remorquage | 'driver' = chauffeur affecté
+  String _transportMode = 'self';
+
+  // Tarif chargé depuis l'API
+  TariffModel? _tariff;
+  bool _tariffLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTariff();
+  }
+
+  Future<void> _loadTariff() async {
+    try {
+      final slug = widget.ctrl.selectedService?.slug;
+      final raw = await ApiService.instance.getTariffs();
+      // Cherche d'abord le tarif correspondant au service, sinon prend le global
+      final list = raw.map((e) => TariffModel.fromJson(e as Map<String, dynamic>)).toList();
+      TariffModel? found;
+      if (slug != null) {
+        found = list.cast<TariffModel?>().firstWhere(
+          (t) => t?.serviceTypeSlug == slug && (t?.isActive ?? false),
+          orElse: () => null,
+        );
+      }
+      found ??= list.cast<TariffModel?>().firstWhere(
+        (t) => t?.serviceTypeSlug == null && (t?.isActive ?? false),
+        orElse: () => null,
+      );
+      if (mounted) setState(() { _tariff = found; _tariffLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _tariffLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final ctrl = widget.ctrl;
     final auth = context.watch<AuthController>();
 
     return SingleChildScrollView(
@@ -691,6 +721,7 @@ class _ConfirmStep extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Récapitulatif ────────────────────────────────────────────────
           Card(
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16)),
@@ -699,21 +730,19 @@ class _ConfirmStep extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Recapitulatif',
+                  const Text('Récapitulatif',
                       style: TextStyle(
                           fontWeight: FontWeight.w700, fontSize: 16)),
                   const SizedBox(height: 12),
-                  _Row('Service',
-                      ctrl.selectedService?.name ?? '—'),
+                  _Row('Service', ctrl.selectedService?.name ?? '—'),
                   if (ctrl.selectedProvider != null)
-                    _Row('Prestataire',
-                        ctrl.selectedProvider!.name),
+                    _Row('Prestataire', ctrl.selectedProvider!.name),
                   if (ctrl.isAuto)
                     const _Row('Affectation', 'Automatique'),
-                  _Row('Position',
-                      ctrl.userAddress ?? 'Position GPS'),
-                  _Row('Paiement',
-                      _paymentLabel(ctrl.paymentMethod)),
+                  _Row('Position', ctrl.userAddress ?? 'Position GPS'),
+                  _Row('Paiement', _paymentLabel(ctrl.paymentMethod)),
+
+                  // ── Devis API (distance + base) ──────────────────────────
                   if (ctrl.estimateLoading)
                     const Padding(
                       padding: EdgeInsets.only(top: 8),
@@ -721,44 +750,64 @@ class _ConfirmStep extends StatelessWidget {
                     )
                   else if (ctrl.estimate != null) ...[
                     const Divider(height: 20),
-                    if (_estimateNum(
-                            ctrl.estimate!['distance_km']) >
-                        0)
-                      _Row(
-                          'Distance',
+                    if (_estimateNum(ctrl.estimate!['distance_km']) > 0)
+                      _Row('Distance',
                           '${_estimateNum(ctrl.estimate!['distance_km']).toStringAsFixed(1)} km'),
-                    _Row('Prix de base',
-                        _fmt(_estimateNum(
-                            ctrl.estimate!['base_price']))),
-                    if (_estimateNum(
-                            ctrl.estimate!['km_cost']) >
-                        0)
-                      _Row(
-                          'Deplacement',
-                          _fmt(_estimateNum(
-                              ctrl.estimate!['km_cost']))),
-                    _Row(
-                      'Total estime',
-                      _fmt(_estimateNum(
-                          ctrl.estimate!['total_price'])),
-                      bold: true,
-                      valueColor: AppColors.primary,
-                    ),
+                    _Row('Frais partenaire',
+                        _fmt(_estimateNum(ctrl.estimate!['base_price']))),
+                    if (_estimateNum(ctrl.estimate!['km_cost']) > 0)
+                      _Row('Déplacement (km)',
+                          _fmt(_estimateNum(ctrl.estimate!['km_cost']))),
                   ],
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
+
+          // ── Choix mode de transport ─────────────────────────────────────
+          const Text('Mode de transport',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          const SizedBox(height: 4),
+          const Text(
+            'Comment souhaitez-vous amener votre véhicule ?',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          _TransportSelector(
+            selected: _transportMode,
+            onSelect: (m) => setState(() => _transportMode = m),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Détail des frais ─────────────────────────────────────────────
+          if (_tariffLoading)
+            const Center(child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: CircularProgressIndicator(),
+            ))
+          else ...[
+            _FraisCard(
+              tariff: _tariff,
+              transportMode: _transportMode,
+              baseEstimate: ctrl.estimate != null
+                  ? _estimateNum(ctrl.estimate!['base_price']) +
+                      _estimateNum(ctrl.estimate!['km_cost'])
+                  : null,
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // ── Mode de paiement ─────────────────────────────────────────────
           const Text('Mode de paiement',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 16)),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 8),
           _PaymentMethods(
             selected: ctrl.paymentMethod,
             onSelect: ctrl.setPaymentMethod,
           ),
           const SizedBox(height: 16),
+
           if (ctrl.submitError == SubmitError.generic) ...[
             Container(
               padding: const EdgeInsets.all(12),
@@ -767,8 +816,7 @@ class _ConfirmStep extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(ctrl.error!,
-                  style:
-                      const TextStyle(color: AppColors.error)),
+                  style: const TextStyle(color: AppColors.error)),
             ),
           ],
           const SizedBox(height: 32),
@@ -779,15 +827,17 @@ class _ConfirmStep extends StatelessWidget {
             icon: Icons.sos,
             onPressed: () async {
               if (auth.user == null) return;
-              final ok =
-                  await ctrl.submitRequest(user: auth.user!);
+              final ok = await ctrl.submitRequest(
+                user: auth.user!,
+                transportMode: _transportMode,
+              );
               if (!ok || !context.mounted) return;
 
               final interventionId = ctrl.createdInterventionId;
               if (interventionId == null) return;
 
               if (ctrl.isAuto) {
-                onSubmitted?.call(interventionId);
+                widget.onSubmitted?.call(interventionId);
               } else {
                 context.go('/user/tracking/$interventionId');
               }
@@ -810,7 +860,7 @@ class _ConfirmStep extends StatelessWidget {
   }
 
   String _fmt(double v) =>
-      '${v.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]} ')} FCFA';
+      '${v.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]} ')} FCFA';
 
   String _paymentLabel(String method) => switch (method) {
         'cash'         => 'Especes',
@@ -818,6 +868,202 @@ class _ConfirmStep extends StatelessWidget {
         'wave'         => 'Wave',
         _              => method,
       };
+}
+
+// ── Sélecteur de transport ────────────────────────────────────────────────────
+
+class _TransportSelector extends StatelessWidget {
+  final String selected;
+  final void Function(String) onSelect;
+  const _TransportSelector({required this.selected, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    const options = [
+      ('self',   '🚗', 'Je me déplace',       'Par mes propres moyens'),
+      ('tow',    '🚛', 'Remorquage',           'Le véhicule est tracté'),
+      ('driver', '🧑‍✈️', 'Chauffeur affecté',  'Un chauffeur conduit pour vous'),
+    ];
+    return Column(
+      children: options.map((o) {
+        final isSelected = selected == o.$1;
+        return GestureDetector(
+          onTap: () => onSelect(o.$1),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? AppColors.primary.withValues(alpha: 0.06)
+                  : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected ? AppColors.primary : AppColors.border,
+                width: isSelected ? 1.5 : 1,
+              ),
+              boxShadow: isSelected
+                  ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.08), blurRadius: 6)]
+                  : [],
+            ),
+            child: Row(children: [
+              Text(o.$2, style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(o.$3,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: isSelected
+                                ? AppColors.primary
+                                : AppColors.textPrimary)),
+                    Text(o.$4,
+                        style: const TextStyle(
+                            fontSize: 11, color: AppColors.textMuted)),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                const Icon(Icons.check_circle,
+                    color: AppColors.primary, size: 20),
+            ]),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ── Carte détail des frais ────────────────────────────────────────────────────
+
+class _FraisCard extends StatelessWidget {
+  final TariffModel? tariff;
+  final String transportMode;
+  /// Montant base + km issu de l'API estimate (si disponible)
+  final double? baseEstimate;
+
+  const _FraisCard({
+    required this.tariff,
+    required this.transportMode,
+    this.baseEstimate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (tariff == null) {
+      // Pas de tarif configuré — on affiche juste l'estimate API si dispo
+      if (baseEstimate == null) return const SizedBox.shrink();
+      return _card([
+        _FraisRow(label: 'Frais partenaire', amount: baseEstimate!.toInt()),
+        _FraisRow(label: 'Frais option', amount: 0, note: 'selon mode'),
+        _FraisRow(label: 'Frais VigiRoutes', amount: 0, note: 'inclus'),
+        _FraisRow(
+          label: 'Total estimé',
+          amount: baseEstimate!.toInt(),
+          isTotal: true,
+        ),
+      ]);
+    }
+
+    final fraisOption = tariff!.fraisOptionPour(transportMode);
+    final optionLabel = switch (transportMode) {
+      'tow'    => 'Option Remorquage',
+      'driver' => 'Option Chauffeur affecté',
+      _        => 'Option Déplacement autonome',
+    };
+
+    // Frais partenaire : si on a l'estimate API, on l'utilise (plus précis),
+    // sinon on prend le tarif configuré.
+    final partnerAmt = baseEstimate != null
+        ? baseEstimate!.toInt()
+        : tariff!.fraisPartenaire;
+
+    final total = partnerAmt + fraisOption + tariff!.fraisVigiRoutes;
+
+    return _card([
+      _FraisRow(label: 'Frais partenaire', amount: partnerAmt),
+      _FraisRow(label: optionLabel, amount: fraisOption),
+      _FraisRow(label: 'Frais service VigiRoutes', amount: tariff!.fraisVigiRoutes),
+      const Divider(height: 16),
+      _FraisRow(label: 'Total à payer', amount: total, isTotal: true),
+    ]);
+  }
+
+  Widget _card(List<Widget> rows) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2))
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              const Icon(Icons.receipt_long_rounded,
+                  color: AppColors.primary, size: 18),
+              const SizedBox(width: 8),
+              const Text('Détail des frais',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: AppColors.textPrimary)),
+            ]),
+            const SizedBox(height: 12),
+            ...rows,
+          ],
+        ),
+      );
+}
+
+class _FraisRow extends StatelessWidget {
+  final String label;
+  final int amount;
+  final bool isTotal;
+  final String? note;
+  const _FraisRow({
+    required this.label,
+    required this.amount,
+    this.isTotal = false,
+    this.note,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final amtStr = note != null
+        ? note!
+        : '${amount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]} ')} FCFA';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Expanded(
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: isTotal ? 14 : 13,
+                  fontWeight:
+                      isTotal ? FontWeight.w700 : FontWeight.normal,
+                  color: isTotal
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary)),
+        ),
+        Text(amtStr,
+            style: TextStyle(
+                fontSize: isTotal ? 16 : 13,
+                fontWeight:
+                    isTotal ? FontWeight.w700 : FontWeight.w500,
+                color: isTotal ? AppColors.primary : AppColors.textPrimary)),
+      ]),
+    );
+  }
 }
 
 class _Row extends StatelessWidget {
