@@ -88,14 +88,14 @@ class CtQuoteModel {
 }
 
 class CtQuoteOperatorModel {
-  final int operatorId;
+  final String operatorId;
   final String? operatorName;
 
   const CtQuoteOperatorModel({required this.operatorId, this.operatorName});
 
   factory CtQuoteOperatorModel.fromJson(Map<String, dynamic> json) {
     return CtQuoteOperatorModel(
-      operatorId: json['operator_id'] as int,
+      operatorId: json["operator_id"] as String,
       operatorName: json['operator_name'] as String?,
     );
   }
@@ -104,7 +104,7 @@ class CtQuoteOperatorModel {
 class CtBookingHint {
   final String vehicleId;
   final String quoteId;
-  final List<int> operatorIds;
+  final List<String> operatorIds;
   final int amount;
 
   const CtBookingHint({
@@ -118,7 +118,7 @@ class CtBookingHint {
     return CtBookingHint(
       vehicleId: json['vehicle_id'] as String,
       quoteId: json['quote_id'] as String,
-      operatorIds: (json['operator_ids'] as List<dynamic>).map((e) => e as int).toList(),
+      operatorIds: (json['operator_ids'] as List<dynamic>).map((e) => e.toString()).toList(),
       amount: json['amount'] as int,
     );
   }

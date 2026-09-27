@@ -109,6 +109,15 @@ class NotificationRouterService {
                 label: 'Voir',
                 onPressed: () => _navigateToCT(message.data)));
 
+      case 'ct_quote_received':
+        _showSnackbar(body,
+            action: SnackBarAction(
+                label: 'Voir le devis',
+                onPressed: () {
+                  final id = message.data['quote_request_id'] as String?;
+                  if (id != null) _navigate('/ct/quote/$id');
+                }));
+
       default:
         break;
     }
@@ -148,6 +157,10 @@ class NotificationRouterService {
       case 'vt_result':
       case 'transport_update':
         _navigateToCT(message.data);
+
+      case 'ct_quote_received':
+        final qrId = message.data['quote_request_id'] as String?;
+        if (qrId != null) _navigate('/ct/quote/$qrId');
 
       default:
         break;
@@ -279,6 +292,7 @@ class NotificationRouterService {
         'vt_reminder_3d'      => '🔔 CT dans 3 jours',
         'vt_reminder_1d'      => '🚨 CT demain !',
         'vt_expired'          => '🚫 CT expiré',
+        'ct_quote_received'   => '💰 Devis CT disponible',
         _                     => 'VigiRoutes',
       };
 
