@@ -289,6 +289,15 @@ class ApiService {
     return d is Map ? Map<String, dynamic>.from(d) : <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> updateVehicle(String id, Map<String, dynamic> data) async {
+    final res = await patch('/user/vehicles/$id', data: data);
+    final d = res.data;
+    if (d is Map && d['vehicle'] is Map) {
+      return Map<String, dynamic>.from(d['vehicle'] as Map);
+    }
+    return d is Map ? Map<String, dynamic>.from(d) : <String, dynamic>{};
+  }
+
   Future<void> deleteVehicle(String id) async {
     await delete('/user/vehicles/$id');
   }

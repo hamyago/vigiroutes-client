@@ -2,9 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/models/models.dart';
+import '../../../core/models/vehicle_model.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/controllers/auth_controller.dart';
+
+// ─── Constantes ───────────────────────────────────────────────────────────────
+
+const _categories = ['VP', 'VU', 'Moto', 'Camion', 'Bus'];
+const _categoryLabels = {
+  'VP': 'Voiture particulière (VP)',
+  'VU': 'Véhicule utilitaire (VU)',
+  'Moto': 'Moto / Tricycle',
+  'Camion': 'Camion / Poids lourd',
+  'Bus': 'Bus / Minibus',
+};
+
+const _energies = ['essence', 'gasoil', 'hybride', 'electrique'];
+const _energyLabels = {
+  'essence': 'Essence',
+  'gasoil': 'Gasoil / Diesel',
+  'hybride': 'Hybride',
+  'electrique': 'Électrique',
+};
+
+const _usages = ['privée', 'public'];
+const _usageLabels = {
+  'privée': 'Usage privé',
+  'public': 'Usage commercial / public',
+};
+
+// ─── Écran principal ──────────────────────────────────────────────────────────
 
 class VehiclesScreen extends StatefulWidget {
   const VehiclesScreen({super.key});
@@ -62,7 +89,6 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     }
   }
 
-  // FIX Bug C : dialog de confirmation + message d'erreur lisible
   Future<void> _confirmDelete(String id, String label) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -91,15 +117,11 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   }
 
   Future<void> _delete(String id) async {
-    // Capturer le messenger avant tout await pour éviter le "use_build_context_synchronously"
-    // et l'appel sur un context démonté. hideCurrentSnackBar() évite aussi d'empiler
-    // plusieurs snackbars si l'utilisateur supprime plusieurs véhicules rapidement.
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     try {
       await ApiService.instance.deleteVehicle(id);
       await _load();
-      // Vérifier mounted APRÈS les awaits
       if (!mounted) return;
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(const SnackBar(
@@ -108,7 +130,6 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
       ));
     } catch (e) {
       if (!mounted) return;
-      // FIX Bug C : message d'erreur lisible au lieu du raw DioException
       final msg = _readableError(e);
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(SnackBar(
@@ -119,24 +140,22 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     }
   }
 
-  /// FIX Bug C : extrait un message lisible depuis les erreurs Dio/HTTP.
   String _readableError(Object e) {
     final raw = e.toString();
-    // DioException contient souvent le message du serveur dans son toString
+    if (raw.contains('422')) {
+      return 'Données invalides. Vérifiez les champs obligatoires (catégorie, usage, énergie, puissance).';
+    }
     if (raw.contains('500') || raw.contains('Internal Server Error')) {
-      return 'Impossible de supprimer ce véhicule (erreur serveur).\n'
-             'Vérifiez que le véhicule n\'a pas de réservation active.';
+      return 'Erreur serveur. Vérifiez que le véhicule n\'a pas de réservation active.';
     }
-    if (raw.contains('404')) {
-      return 'Véhicule introuvable. Il a peut-être déjà été supprimé.';
-    }
+    if (raw.contains('404')) return 'Véhicule introuvable.';
     if (raw.contains('403') || raw.contains('unauthorized')) {
-      return 'Vous n\'êtes pas autorisé à supprimer ce véhicule.';
+      return 'Vous n\'êtes pas autorisé à effectuer cette action.';
     }
     if (raw.contains('SocketException') || raw.contains('connection')) {
       return 'Pas de connexion internet. Réessayez.';
     }
-    return 'Erreur lors de la suppression. Réessayez.';
+    return 'Une erreur est survenue. Réessayez.';
   }
 
   Future<void> _showAddVehicle() async {
@@ -144,9 +163,19 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _AddVehicleSheet(),
+      builder: (_) => const _VehicleSheet(),
     );
     if (added == true) await _load();
+  }
+
+  Future<void> _showEditVehicle(VehicleModel v) async {
+    final edited = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _VehicleSheet(vehicle: v),
+    );
+    if (edited == true) await _load();
   }
 
   @override
@@ -192,10 +221,10 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                     itemCount: _vehicles.length,
                     itemBuilder: (_, i) {
                       final v = _vehicles[i];
-                      final label = '${v.brand} ${v.model} ${v.plate}'.trim();
+                      final label = '${v.brand} ${v.model} ${v.registrationNumber}'.trim();
                       return _VehicleTile(
                         vehicle: v,
-                        // FIX Bug C : passer par _confirmDelete
+                        onEdit: () => _showEditVehicle(v),
                         onDelete: () => _confirmDelete(v.id, label),
                       );
                     },
@@ -209,8 +238,9 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
 class _VehicleTile extends StatelessWidget {
   final VehicleModel vehicle;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
-  const _VehicleTile({required this.vehicle, required this.onDelete});
+  const _VehicleTile({required this.vehicle, required this.onEdit, required this.onDelete});
 
   @override
   Widget build(BuildContext context) => Container(
@@ -241,7 +271,7 @@ class _VehicleTile extends StatelessWidget {
                       children: [
                     Text('${vehicle.brand} ${vehicle.model}',
                         style: const TextStyle(fontWeight: FontWeight.w600)),
-                    Text(vehicle.plate,
+                    Text(vehicle.registrationNumber,
                         style: const TextStyle(
                             color: AppColors.textSecondary, fontSize: 13)),
                     Row(children: [
@@ -256,9 +286,32 @@ class _VehicleTile extends StatelessWidget {
                     ]),
                   ])),
               IconButton(
+                  icon: const Icon(Icons.edit_outlined, color: AppColors.primary),
+                  tooltip: 'Modifier',
+                  onPressed: onEdit),
+              IconButton(
                   icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                  tooltip: 'Supprimer',
                   onPressed: onDelete),
             ]),
+            // Infos techniques
+            if (vehicle.category.isNotEmpty || vehicle.usage != null || vehicle.puissanceCv != null) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  if (vehicle.category.isNotEmpty)
+                    _InfoChip(label: _categoryLabels[vehicle.category] ?? vehicle.category, icon: Icons.category_outlined),
+                  if (vehicle.usage != null)
+                    _InfoChip(label: _usageLabels[vehicle.usage] ?? vehicle.usage!, icon: Icons.badge_outlined),
+                  if (vehicle.energy != null)
+                    _InfoChip(label: _energyLabels[vehicle.energy] ?? vehicle.energy!, icon: Icons.local_gas_station_outlined),
+                  if (vehicle.puissanceCv != null)
+                    _InfoChip(label: '${vehicle.puissanceCv} CV', icon: Icons.speed_outlined),
+                ],
+              ),
+            ],
             const SizedBox(height: 10),
             // Badges CT / Assurance / Vignette
             Wrap(
@@ -268,22 +321,46 @@ class _VehicleTile extends StatelessWidget {
                 _ExpiryBadge(
                   icon: Icons.verified_outlined,
                   label: 'CT',
-                  date: vehicle.ctExpiryDate,
+                  date: vehicle.technicalVisitExpiresAt,
                 ),
                 _ExpiryBadge(
                   icon: Icons.shield_outlined,
                   label: 'Assurance',
-                  date: vehicle.insuranceExpiryDate,
+                  date: vehicle.insuranceExpiresAt,
                 ),
                 _ExpiryBadge(
                   icon: Icons.local_offer_outlined,
                   label: 'Vignette',
-                  date: vehicle.vignetteExpiryDate,
+                  date: vehicle.vignetteExpiresAt,
                 ),
               ],
             ),
           ],
         ),
+      );
+}
+
+class _InfoChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  const _InfoChip({required this.label, required this.icon});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 12, color: AppColors.primary),
+          const SizedBox(width: 4),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.primary)),
+        ]),
       );
 }
 
@@ -421,15 +498,17 @@ class _DatePicker extends StatelessWidget {
   }
 }
 
-// ─── Formulaire d'ajout ───────────────────────────────────────────────────────
+// ─── Formulaire ajout / édition ───────────────────────────────────────────────
 
-class _AddVehicleSheet extends StatefulWidget {
-  const _AddVehicleSheet();
+class _VehicleSheet extends StatefulWidget {
+  /// Si null → mode ajout. Sinon → mode édition.
+  final VehicleModel? vehicle;
+  const _VehicleSheet({this.vehicle});
   @override
-  State<_AddVehicleSheet> createState() => _AddVehicleSheetState();
+  State<_VehicleSheet> createState() => _VehicleSheetState();
 }
 
-class _AddVehicleSheetState extends State<_AddVehicleSheet> {
+class _VehicleSheetState extends State<_VehicleSheet> {
   final _formKey        = GlobalKey<FormState>();
   final _brandCtrl      = TextEditingController();
   final _modelCtrl      = TextEditingController();
@@ -437,10 +516,40 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
   final _colorCtrl      = TextEditingController();
   final _yearCtrl       = TextEditingController();
   final _carteGriseCtrl = TextEditingController();
+  final _puissanceCtrl  = TextEditingController();
+  final _ptacCtrl       = TextEditingController();
+
+  String? _category;
+  String? _energy;
+  String? _usage;
+
   DateTime? _ctExpiryDate;
   DateTime? _insuranceExpiryDate;
   DateTime? _vignetteExpiryDate;
   bool _loading = false;
+
+  bool get _isEdit => widget.vehicle != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final v = widget.vehicle;
+    if (v != null) {
+      _brandCtrl.text      = v.brand;
+      _modelCtrl.text      = v.model;
+      _plateCtrl.text      = v.registrationNumber;
+      _colorCtrl.text      = v.color ?? '';
+      _yearCtrl.text       = v.year?.toString() ?? '';
+      _carteGriseCtrl.text = v.carteGriseNumber ?? '';
+      _puissanceCtrl.text  = v.puissanceCv?.toString() ?? '';
+      _category            = v.category.isEmpty ? null : v.category;
+      _energy              = v.energy;
+      _usage               = v.usage;
+      _ctExpiryDate        = v.technicalVisitExpiresAt;
+      _insuranceExpiryDate = v.insuranceExpiresAt;
+      _vignetteExpiryDate  = v.vignetteExpiresAt;
+    }
+  }
 
   @override
   void dispose() {
@@ -450,6 +559,8 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
     _colorCtrl.dispose();
     _yearCtrl.dispose();
     _carteGriseCtrl.dispose();
+    _puissanceCtrl.dispose();
+    _ptacCtrl.dispose();
     super.dispose();
   }
 
@@ -465,40 +576,55 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
     if (picked != null) onPicked(picked);
   }
 
+  Map<String, dynamic> _buildPayload() => {
+    'brand': _brandCtrl.text.trim(),
+    'model': _modelCtrl.text.trim(),
+    'registration_number': _plateCtrl.text.trim().toUpperCase(),
+    'category': _category ?? 'VP',
+    'usage': _usage ?? 'privée',
+    if (_energy != null) 'energy': _energy,
+    if (_colorCtrl.text.trim().isNotEmpty) 'color': _colorCtrl.text.trim(),
+    if (_yearCtrl.text.trim().isNotEmpty)
+      'year': int.tryParse(_yearCtrl.text.trim()),
+    if (_carteGriseCtrl.text.trim().isNotEmpty)
+      'carte_grise_number': _carteGriseCtrl.text.trim(),
+    if (_puissanceCtrl.text.trim().isNotEmpty)
+      'puissance_cv': int.tryParse(_puissanceCtrl.text.trim()),
+    if (_ctExpiryDate != null)
+      'technical_visit_expires_at':
+          DateFormat('yyyy-MM-dd').format(_ctExpiryDate!),
+    if (_insuranceExpiryDate != null)
+      'insurance_expires_at':
+          DateFormat('yyyy-MM-dd').format(_insuranceExpiryDate!),
+    if (_vignetteExpiryDate != null)
+      'vignette_expires_at':
+          DateFormat('yyyy-MM-dd').format(_vignetteExpiryDate!),
+  };
+
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _loading = true);
     try {
-      await ApiService.instance.addVehicle({
-        'brand': _brandCtrl.text.trim(),
-        'model': _modelCtrl.text.trim(),
-        'registration_number': _plateCtrl.text.trim().toUpperCase(),
-        if (_colorCtrl.text.trim().isNotEmpty) 'color': _colorCtrl.text.trim(),
-        if (_yearCtrl.text.trim().isNotEmpty)
-          'year': int.tryParse(_yearCtrl.text.trim()),
-        if (_carteGriseCtrl.text.trim().isNotEmpty)
-          'carte_grise_number': _carteGriseCtrl.text.trim(),
-        if (_ctExpiryDate != null)
-          'technical_visit_expires_at':
-              DateFormat('yyyy-MM-dd').format(_ctExpiryDate!),
-        if (_insuranceExpiryDate != null)
-          'insurance_expires_at':
-              DateFormat('yyyy-MM-dd').format(_insuranceExpiryDate!),
-        if (_vignetteExpiryDate != null)
-          'vignette_expires_at':
-              DateFormat('yyyy-MM-dd').format(_vignetteExpiryDate!),
-      });
+      if (_isEdit) {
+        await ApiService.instance.updateVehicle(widget.vehicle!.id, _buildPayload());
+      } else {
+        await ApiService.instance.addVehicle(_buildPayload());
+      }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Véhicule ajouté'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(_isEdit ? 'Véhicule mis à jour' : 'Véhicule ajouté'),
             backgroundColor: AppColors.success));
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
+        final raw = e.toString();
+        final msg = raw.contains('422')
+            ? 'Données invalides : vérifiez la catégorie, l\'usage et la puissance.'
+            : 'Erreur : $e';
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+            .showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppColors.error));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -514,6 +640,33 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       );
+
+  Widget _dropdownField<T>({
+    required String label,
+    required T? value,
+    required List<T> items,
+    required String Function(T) itemLabel,
+    required ValueChanged<T?> onChanged,
+    bool required = false,
+    IconData? icon,
+  }) {
+    return DropdownButtonFormField<T>(
+      value: value,
+      decoration: _dec(label, icon: icon),
+      hint: Text('Sélectionner'),
+      isExpanded: true,
+      items: items
+          .map((e) => DropdownMenuItem<T>(
+                value: e,
+                child: Text(itemLabel(e), overflow: TextOverflow.ellipsis),
+              ))
+          .toList(),
+      onChanged: onChanged,
+      validator: required
+          ? (v) => v == null ? 'Champ requis' : null
+          : null,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -537,8 +690,8 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const Text('Ajouter un véhicule',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+            Text(_isEdit ? 'Modifier le véhicule' : 'Ajouter un véhicule',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
             const SizedBox(height: 20),
 
             // ── Marque ──
@@ -568,15 +721,67 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
             ),
             const SizedBox(height: 12),
 
-            // ── Couleur & Année sur la même ligne ──
+            // ── Catégorie * ──
+            _dropdownField<String>(
+              label: 'Catégorie *',
+              value: _category,
+              items: _categories,
+              itemLabel: (c) => _categoryLabels[c] ?? c,
+              onChanged: (v) => setState(() => _category = v),
+              required: true,
+              icon: Icons.category_outlined,
+            ),
+            const SizedBox(height: 12),
+
+            // ── Usage * ──
+            _dropdownField<String>(
+              label: 'Usage *',
+              value: _usage,
+              items: _usages,
+              itemLabel: (u) => _usageLabels[u] ?? u,
+              onChanged: (v) => setState(() => _usage = v),
+              required: true,
+              icon: Icons.badge_outlined,
+            ),
+            const SizedBox(height: 12),
+
+            // ── Énergie ──
+            _dropdownField<String>(
+              label: 'Carburant / Énergie',
+              value: _energy,
+              items: _energies,
+              itemLabel: (e) => _energyLabels[e] ?? e,
+              onChanged: (v) => setState(() => _energy = v),
+              icon: Icons.local_gas_station_outlined,
+            ),
+            const SizedBox(height: 12),
+
+            // ── Puissance & Couleur sur la même ligne ──
             Row(children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _puissanceCtrl,
+                  decoration: _dec('Puissance (CV)', hint: '90', icon: Icons.speed_outlined),
+                  keyboardType: TextInputType.number,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    if (int.tryParse(v.trim()) == null) return 'Nombre entier';
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: TextFormField(
                   controller: _colorCtrl,
                   decoration: _dec('Couleur', hint: 'Blanc'),
                 ),
               ),
-              const SizedBox(width: 10),
+            ]),
+            const SizedBox(height: 12),
+
+            // ── Année & Carte grise sur la même ligne ──
+            Row(children: [
               Expanded(
                 child: TextFormField(
                   controller: _yearCtrl,
@@ -592,16 +797,16 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                   },
                 ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: _carteGriseCtrl,
+                  decoration: _dec('N° Carte grise', hint: 'CI-123456-A',
+                      icon: Icons.article_outlined),
+                  textCapitalization: TextCapitalization.characters,
+                ),
+              ),
             ]),
-            const SizedBox(height: 12),
-
-            // ── N° Carte grise ──
-            TextFormField(
-              controller: _carteGriseCtrl,
-              decoration: _dec('N° Carte grise', hint: 'CI-123456-A',
-                  icon: Icons.article_outlined),
-              textCapitalization: TextCapitalization.characters,
-            ),
             const SizedBox(height: 16),
 
             // ── Dates de validité ──
@@ -670,8 +875,9 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                         height: 22,
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2))
-                    : const Text('Enregistrer',
-                        style: TextStyle(
+                    : Text(
+                        _isEdit ? 'Enregistrer les modifications' : 'Enregistrer',
+                        style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w600)),
               ),
             ),
