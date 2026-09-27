@@ -457,6 +457,8 @@ class _Step3TransportMode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
+    final locked = ctrl.transportLocked;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -471,6 +473,35 @@ class _Step3TransportMode extends StatelessWidget {
             ),
           ),
         ),
+        // Bandeau informatif quand le mode est imposé par le devis
+        if (locked)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lock_outline,
+                      size: 18, color: Colors.amber.shade800),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Le mode de transport a été défini dans votre demande de devis et ne peut pas être modifié.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         _TransportOption(
           value: 'self',
           label: 'Je conduis moi-même',
@@ -478,6 +509,7 @@ class _Step3TransportMode extends StatelessWidget {
           icon: Icons.directions_car,
           selected: ctrl.transportMode,
           onSelect: ctrl.setTransportMode,
+          locked: locked,
         ),
         _TransportOption(
           value: 'tow',
@@ -486,7 +518,8 @@ class _Step3TransportMode extends StatelessWidget {
           icon: Icons.local_shipping,
           selected: ctrl.transportMode,
           onSelect: ctrl.setTransportMode,
-          fee: ctrl.towFee,
+          fee: locked ? null : ctrl.towFee,
+          locked: locked,
         ),
         _TransportOption(
           value: 'driver',
@@ -495,9 +528,10 @@ class _Step3TransportMode extends StatelessWidget {
           icon: Icons.person,
           selected: ctrl.transportMode,
           onSelect: ctrl.setTransportMode,
-          fee: ctrl.driverFee,
+          fee: locked ? null : ctrl.driverFee,
+          locked: locked,
         ),
-        if (ctrl.transportMode == 'driver') ...[
+        if (ctrl.transportMode == 'driver' && !locked) ...[
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1077,6 +1111,9 @@ class _SlotReservationTimer extends StatelessWidget {
   }
 }
 
+/// Widget carte pour une option de transport.
+/// Quand [locked] est true et que l'option n'est PAS sélectionnée,
+/// elle est affichée en grisé et non cliquable.
 class _TransportOption extends StatelessWidget {
   final String value;
   final String label;
@@ -1085,6 +1122,8 @@ class _TransportOption extends StatelessWidget {
   final String selected;
   final void Function(String) onSelect;
   final double? fee;
+  /// true si le mode de transport est imposé par un devis (non modifiable)
+  final bool locked;
 
   const _TransportOption({
     required this.value,
@@ -1094,67 +1133,77 @@ class _TransportOption extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     this.fee,
+    this.locked = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final isSelected = selected == value;
     final fmt = NumberFormat('#,##0', 'fr');
+    // Quand le mode est verrouillé, les options non-sélectionnées sont inactives
+    final isDisabled = locked && !isSelected;
 
-    return GestureDetector(
-      onTap: () => onSelect(value),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primary.withValues(alpha: 0.08)
-              : AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.divider,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon,
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.textSecondary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    description,
-                    style: TextStyle(
-                        color: AppColors.textSecondary, fontSize: 12),
-                  ),
-                ],
-              ),
+    return Opacity(
+      opacity: isDisabled ? 0.38 : 1.0,
+      child: GestureDetector(
+        onTap: isDisabled ? null : () => onSelect(value),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.primary.withValues(alpha: 0.08)
+                : AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.divider,
+              width: isSelected ? 2 : 1,
             ),
-            if (fee != null)
-              Text(
-                '+${fmt.format(fee)} F',
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
+          ),
+          child: Row(
+            children: [
+              Icon(icon,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.textSecondary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      description,
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ],
                 ),
               ),
-            if (isSelected) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.check_circle, color: AppColors.primary),
+              if (fee != null && fee! > 0)
+                Text(
+                  '+${fmt.format(fee)} F',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              if (isSelected) ...[
+                const SizedBox(width: 8),
+                Icon(Icons.check_circle, color: AppColors.primary),
+              ],
+              if (locked && isSelected) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.lock, size: 16, color: AppColors.primary),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
