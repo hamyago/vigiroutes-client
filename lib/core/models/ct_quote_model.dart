@@ -106,12 +106,14 @@ class CtBookingHint {
   final String quoteId;
   final List<String> operatorIds;
   final int amount;
+  final String transportMode;
 
   const CtBookingHint({
     required this.vehicleId,
     required this.quoteId,
     required this.operatorIds,
     required this.amount,
+    this.transportMode = 'self',
   });
 
   factory CtBookingHint.fromJson(Map<String, dynamic> json) {
@@ -120,6 +122,7 @@ class CtBookingHint {
       quoteId: json['quote_id'] as String,
       operatorIds: (json['operator_ids'] as List<dynamic>).map((e) => e.toString()).toList(),
       amount: json['amount'] as int,
+      transportMode: json['transport_mode'] as String? ?? 'self',
     );
   }
 }

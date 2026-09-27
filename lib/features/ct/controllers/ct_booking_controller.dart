@@ -72,10 +72,7 @@ class CtBookingController extends ChangeNotifier {
       } else if (_vehicles.isNotEmpty) {
         _selectedVehicle = _vehicles.first;
       }
-      // Pré-sélectionner le mode de transport depuis le hint si fourni
-      if (hint.transportMode != null) {
-        _transportMode = hint.transportMode!;
-      }
+      _transportMode = hint.transportMode;
     } catch (e) {
       _error = e.toString();
     } finally {
