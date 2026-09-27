@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../core/models/vehicle_model.dart';
+import '../../../core/models/ct_quote_model.dart';
 import '../../../core/services/ct_service.dart';
 
 class CtBookingController extends ChangeNotifier {
@@ -55,6 +56,34 @@ class CtBookingController extends ChangeNotifier {
   void selectVehicle(VehicleModel v) {
     _selectedVehicle = v;
     notifyListeners();
+  }
+
+  /// Pré-sélectionne le véhicule depuis un bookingHint (après acceptation devis CT)
+  /// et saute directement à l'étape 2 sans repasser par la sélection de véhicule.
+  Future<void> applyBookingHint(CtBookingHint hint) async {
+    _isLoading = true;
+    _error = null;
+    if (!_disposed) notifyListeners();
+    try {
+      _vehicles = await CtService.instance.getVehicles();
+      final match = _vehicles.where((v) => v.id == hint.vehicleId).firstOrNull;
+      if (match != null) {
+        _selectedVehicle = match;
+      } else if (_vehicles.isNotEmpty) {
+        _selectedVehicle = _vehicles.first;
+      }
+      // Pré-sélectionner le mode de transport depuis le hint si fourni
+      if (hint.transportMode != null) {
+        _transportMode = hint.transportMode!;
+      }
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      if (!_disposed) notifyListeners();
+    }
+    // Passer directement à l'étape 2 (centre + créneau)
+    goToStep2();
   }
 
   // ── Centers ───────────────────────────────────────────────────────────────

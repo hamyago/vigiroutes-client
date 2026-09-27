@@ -38,6 +38,7 @@ import '../../features/ct/controllers/ct_quote_controller.dart';
 import '../../features/ct/screens/ct_quote_requests_screen.dart';
 import '../../features/ct/screens/ct_quote_new_screen.dart';
 import '../../features/ct/screens/ct_quote_detail_screen.dart';
+import '../../core/models/ct_quote_model.dart';
 
 class UserShell extends StatefulWidget {
   final Widget child;
@@ -273,12 +274,12 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
               if (q.containsKey('booking_id')) {
                 return CtBookingDetailScreen(bookingId: q['booking_id']!);
               }
-              // Si une notification apporte un vehicle_id → flow de réservation
-              // avec le véhicule pré-sélectionné (géré dans le flow).
-              // Sinon, flow vierge normal.
+              // Extraire le bookingHint depuis l'extra (après acceptation d'un devis CT)
+              final extra = s.extra as Map<String, dynamic>?;
+              final hint = extra?['booking_hint'] as CtBookingHint?;
               return ChangeNotifierProvider(
                 create: (_) => CtBookingController(),
-                child: const CtBookingFlowScreen(),
+                child: CtBookingFlowScreen(bookingHint: hint),
               );
             }),
         GoRoute(

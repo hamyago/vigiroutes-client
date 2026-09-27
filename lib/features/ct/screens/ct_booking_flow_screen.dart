@@ -8,9 +8,15 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../controllers/ct_booking_controller.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/models/ct_quote_model.dart';
+import '../../../core/services/ct_service.dart';
 
 class CtBookingFlowScreen extends StatefulWidget {
-  const CtBookingFlowScreen({super.key});
+  /// bookingHint optionnel : passé via extra quand on arrive depuis l'acceptation d'un devis CT.
+  /// Dans ce cas le véhicule est pré-sélectionné et on saute l'étape 1.
+  final CtBookingHint? bookingHint;
+
+  const CtBookingFlowScreen({super.key, this.bookingHint});
 
   @override
   State<CtBookingFlowScreen> createState() => _CtBookingFlowScreenState();
@@ -21,7 +27,13 @@ class _CtBookingFlowScreenState extends State<CtBookingFlowScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CtBookingController>().loadVehicles();
+      final ctrl = context.read<CtBookingController>();
+      if (widget.bookingHint != null) {
+        // Vient de l'acceptation d'un devis : pré-sélectionner le véhicule et sauter étape 1
+        ctrl.applyBookingHint(widget.bookingHint!);
+      } else {
+        ctrl.loadVehicles();
+      }
     });
   }
 
@@ -756,6 +768,39 @@ class _Step4SummaryState extends State<_Step4Summary> {
             ),
           ],
           const SizedBox(height: 24),
+
+          // ── Récapitulatif montant visible avant paiement ─────────────────
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Montant à payer',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  '${fmt.format(ctrl.totalAmount)} FCFA',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
           Row(
             children: [
               OutlinedButton(
@@ -791,9 +836,9 @@ class _Step4SummaryState extends State<_Step4Summary> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white),
                         )
-                      : const Text(
-                          'Payer maintenant',
-                          style: TextStyle(
+                      : Text(
+                          'Payer ${fmt.format(ctrl.totalAmount)} FCFA',
+                          style: const TextStyle(
                               fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                 ),
