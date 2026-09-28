@@ -529,7 +529,7 @@ class _Step3TransportMode extends StatelessWidget {
           fee: locked ? null : ctrl.driverFee,
           locked: locked,
         ),
-        if (ctrl.transportMode == 'driver' && !locked) ...[
+        if (ctrl.transportMode == 'driver') ...[
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),

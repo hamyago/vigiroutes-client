@@ -79,6 +79,12 @@ class CtBookingController extends ChangeNotifier {
     // Transport imposé par le devis (l'utilisateur ne pourra pas le changer)
     _transportMode = hint.transportMode;
 
+    // Pré-cocher la case clés si le devis impose le mode chauffeur.
+    // Ça débloque immédiatement le bouton Continuer à l'étape 3.
+    if (hint.transportMode == 'driver') {
+      _keyHandoverAccepted = true;
+    }
+
     if (!_disposed) notifyListeners();
 
     try {
