@@ -267,7 +267,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> with RouteAware {
                     const SizedBox(width: 10),
                     // Bouton Visite Technique
                     GestureDetector(
-                      onTap: () => context.push('/ct/booking'),
+                      onTap: () => context.push('/ct/entry'),
                       child: Container(
                         height: 44,
                         padding: const EdgeInsets.symmetric(horizontal: 14),
