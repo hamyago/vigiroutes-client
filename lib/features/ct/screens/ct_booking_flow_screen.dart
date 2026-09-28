@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
@@ -57,9 +58,13 @@ class _CtBookingFlowScreenState extends State<CtBookingFlowScreen> {
     final ctrl = context.watch<CtBookingController>();
 
     return PopScope(
-      canPop: ctrl.step == 1,
+      // canPop = true si :
+      //  - étape 1 : on peut quitter le flow
+      //  - étape 5 : après paiement/QR, on quitte (plus de retour arrière)
+      canPop: ctrl.step == 1 || ctrl.step == 5,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && ctrl.step > 1) {
+        // Retour arrière entre les étapes 2-4 uniquement
+        if (!didPop && ctrl.step > 1 && ctrl.step < 5) {
           ctrl.goBack();
         }
       },
@@ -967,9 +972,25 @@ class _Step5Payment extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              TextButton(
-                onPressed: ctrl.reset,
-                child: const Text('Nouvelle reservation'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      ctrl.reset();
+                      context.go('/ct/bookings');
+                    },
+                    child: const Text('Voir mes rendez-vous'),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () {
+                      ctrl.reset();
+                      context.pop();
+                    },
+                    child: const Text('Terminer'),
+                  ),
+                ],
               ),
             ],
           ),

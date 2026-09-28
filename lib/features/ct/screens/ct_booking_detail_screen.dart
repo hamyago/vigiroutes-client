@@ -34,6 +34,21 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
     }
   }
 
+  /// Message contextuel selon le mode de transport.
+  /// Le QR est présenté différemment selon qui amène le véhicule au centre.
+  String _qrHintForTransport(String mode) {
+    switch (mode) {
+      case 'tow':
+        return 'Votre dépanneur va scanner ce QR code lors de la prise en charge du véhicule. '
+               'Vous pouvez aussi lui partager cette image par WhatsApp ou SMS.';
+      case 'driver':
+        return 'Votre chauffeur va scanner ce QR code lors de la prise en charge du véhicule. '
+               'Vous pouvez aussi lui partager cette image par WhatsApp ou SMS.';
+      default:
+        return 'Présentez ce QR code à l\'agent du centre le jour de votre rendez-vous.';
+    }
+  }
+
   String _formatDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
@@ -231,9 +246,7 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
             // QR valide → on l'affiche
             return _Section(title: 'QR Code d\'entrée', children: [
               Text(
-                hoursSince >= 0
-                    ? 'Contrôle en cours ou imminent. Présentez ce QR code à l\'agent terrain.'
-                    : 'Présentez ce QR code à l\'agent terrain le jour du rendez-vous.',
+                _qrHintForTransport(b.transportMode),
                 style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 16),
