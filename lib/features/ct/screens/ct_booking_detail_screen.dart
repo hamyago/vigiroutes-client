@@ -172,49 +172,107 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
         ]),
         const SizedBox(height: 16),
 
-        // QR code (affiché dès que le paiement est validé)
+        // ── QR code conditionnel (Option D) ─────────────────────────────────
+        // Le QR est affiché tant que le créneau est dans le futur OU
+        // dans les 24h qui suivent. Après, il est masqué (contrôle effectué).
         if (b.qrToken != null) ...[
-          _Section(title: 'QR Code d\'entrée', children: [
-            const Text(
-              'Présentez ce QR code à l\'agent terrain le jour du rendez-vous.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: QrImageView(
-                  data: b.qrToken!,
-                  version: QrVersions.auto,
-                  size: 200,
-                  eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.square,
-                    color: Colors.black,
+          Builder(builder: (context) {
+            final hoursSince = DateTime.now().difference(b.slotStartsAt).inHours;
+            final isQrStillValid = hoursSince < 24;
+            final isQrExpired = !isQrStillValid;
+
+            if (isQrExpired) {
+              return _Section(title: 'QR Code d\'entrée', children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.textMuted.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.textMuted.withValues(alpha: 0.25),
+                    ),
                   ),
-                  dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.square,
-                    color: Colors.black,
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle_outline_rounded,
+                          color: AppColors.textMuted, size: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Contrôle effectué',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Le QR code n\'est plus disponible 24h après le rendez-vous.',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ]);
+            }
+
+            // QR valide → on l'affiche
+            return _Section(title: 'QR Code d\'entrée', children: [
+              Text(
+                hoursSince >= 0
+                    ? 'Contrôle en cours ou imminent. Présentez ce QR code à l\'agent terrain.'
+                    : 'Présentez ce QR code à l\'agent terrain le jour du rendez-vous.',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: QrImageView(
+                    data: b.qrToken!,
+                    version: QrVersions.auto,
+                    size: 200,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: Colors.black,
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Colors.black,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                b.reference,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                  letterSpacing: 1.5,
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  b.reference,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 1.5,
+                  ),
                 ),
               ),
-            ),
-          ]),
+            ]);
+          }),
           const SizedBox(height: 16),
         ],
 

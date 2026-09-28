@@ -126,6 +126,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   label: 'Mes devis CT',
                   onTap: () => context.push('/ct/quotes'),
                 ),
+                _MenuItem(
+                  icon: Icons.event_available_outlined,
+                  label: 'Mes rendez-vous CT',
+                  onTap: () => context.push('/ct/bookings'),
+                ),
               ],
             ),
 

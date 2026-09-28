@@ -102,6 +102,18 @@ class CtEntryScreen extends StatelessWidget {
               onTap: () => context.push('/ct/quotes'),
               primary: false,
             ),
+            const SizedBox(height: 16),
+            _EntryCard(
+              icon: Icons.event_available_outlined,
+              iconColor: AppColors.success,
+              title: 'Mes rendez-vous',
+              subtitle:
+                  'Retrouvez vos rendez-vous confirmés, votre QR code d\'entrée '
+                  'et l\'historique de vos contrôles techniques.',
+              actionLabel: 'Voir mes rendez-vous',
+              onTap: () => context.push('/ct/bookings'),
+              primary: false,
+            ),
             const SizedBox(height: 32),
             Center(
               child: Text(
