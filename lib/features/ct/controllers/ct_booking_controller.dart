@@ -324,33 +324,41 @@ class CtBookingController extends ChangeNotifier {
   /// Fallback : montant du devis si on vient d'un hint.
   /// Fallback final : 15000 FCFA (valeur par défaut prudente).
   double get bookingFee {
-    if (_activeBooking != null && _activeBooking!.bookingFee > 0) {
-      return _activeBooking!.bookingFee;
-    }
+    // PRIORITÉ 1 : devis accepté = contrat, le montant est figé
     if (fromHint && _bookingHint!.amount > 0) {
       return _bookingHint!.amount.toDouble();
+    }
+    // PRIORITÉ 2 : valeur backend
+    if (_activeBooking != null && _activeBooking!.bookingFee > 0) {
+      return _activeBooking!.bookingFee;
     }
     return 15000;
   }
 
   /// Frais de transport.
-  /// Priorité : valeur backend. Sinon 0 si hint (déjà inclus).
-  /// Sinon calcul local (prévisualisation avant création du booking).
+  /// ⚠️ Si on vient d'un devis accepté, le transport est DÉJÀ INCLUS dans
+  /// le montant total du devis → on ne l'affiche pas séparément (0).
   double get transportFee {
+    // Devis = tout inclus, pas de frais transport séparé
+    if (fromHint) return 0;
     if (_activeBooking != null && _activeBooking!.transportFee > 0) {
       return _activeBooking!.transportFee;
     }
-    if (fromHint) return 0; // inclus dans le montant du devis
     return switch (_transportMode) {
-      'tow'    => 5000,
-      'driver' => 8000,
+      'tow'    => towFee,
+      'driver' => driverFee,
       _        => 0,
     };
   }
 
   /// Montant total à payer.
-  /// Priorité : valeur backend. Sinon somme des frais calculés.
+  /// PRIORITÉ 1 : devis accepté (contrat).
+  /// PRIORITÉ 2 : valeur backend.
+  /// PRIORITÉ 3 : somme calculée localement (prévisualisation).
   double get totalAmount {
+    if (fromHint && _bookingHint!.amount > 0) {
+      return _bookingHint!.amount.toDouble();
+    }
     if (_activeBooking != null && _activeBooking!.totalAmount > 0) {
       return _activeBooking!.totalAmount;
     }
@@ -525,6 +533,7 @@ class CtBookingController extends ChangeNotifier {
         vehicleId: _selectedVehicle!.id,
         sessionId: _selectedSlot!.sessionId,
         transportOption: _transportMode,
+        quoteId: _bookingHint?.quoteId,
       );
       _startCountdown();
       return true;

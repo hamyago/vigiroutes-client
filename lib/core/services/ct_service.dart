@@ -161,11 +161,13 @@ class CtService {
     required String vehicleId,
     required String sessionId,
     String? transportOption,
+    String? quoteId,
   }) async {
     final res = await _api.post('/ct/bookings', data: {
       'vehicle_id': vehicleId,
       'session_id': sessionId,
       if (transportOption != null) 'transport_mode': transportOption,
+      if (quoteId != null) 'quote_id': quoteId,
     });
     final obj = _extractObject(res.data, key: 'data');
     return CtBookingModel.fromJson(obj);
