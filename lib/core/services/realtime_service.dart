@@ -2,29 +2,22 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Service WebSocket natif — compatible avec Laravel Reverb.
 //
-// Remplace pusher_channels_flutter (incompatible AGP 8.11+).
+// ⚠️ AUTH : on utilise UNIQUEMENT le token Sanctum (voir ApiService).
+// L'app n'utilise plus Firebase Auth (remplacé par Termii OTP + Sanctum).
 //
-// ⚠️ CONTRAT BACKEND (validé le 28/09/2026) :
-//   - Endpoint auth : POST /api/user/broadcasting/auth
-//   - Headers : Authorization: Bearer <firebase_id_token>
-//   - Body : { socket_id, channel_name }
-//   - Réponse : { auth: "key:signature" }
-//
-// Canaux utilisés :
-//   - private-user.{userId}        → intervention.updated
-//   - private-admin.interventions  → intervention.updated, emergency.created
-//
-// ⚠️ Le token Firebase DOIT être rafraîchi avant chaque abonnement à un
-//    canal privé — les tokens Firebase expirent au bout d'1h. Sans ça,
-//    tous les abonnements échouent silencieusement après la première heure.
+// ⚠️ CONTRAT BACKEND :
+//   - Endpoint : POST /api/user/broadcasting/auth
+//   - Header   : Authorization: Bearer <sanctum_token>
+//   - Body     : { socket_id, channel_name }
+//   - Réponse  : { auth: "key:signature" }
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class RealtimeService {
@@ -37,7 +30,6 @@ class RealtimeService {
   static const String _authUrl = 'https://$_host/api/user/broadcasting/auth';
 
   WebSocketChannel? _channel;
-  String?           _token;    // token Sanctum (fallback)
   String?           _socketId;
   bool              _connected = false;
 
@@ -46,23 +38,16 @@ class RealtimeService {
 
   final Dio _authDio = Dio();
 
-  /// Un StreamController par (channel, event).
   final Map<String, StreamController<Map<String, dynamic>>> _controllers = {};
-
-  /// Canaux actifs → set d'events souscrits.
   final Map<String, Set<String>> _subscriptions = {};
-
-  /// Canaux en attente de socket_id (race condition au démarrage).
   final Set<String> _pendingSubscriptions = {};
 
   bool get isConnected => _connected;
 
-  // ─────────────────────────────────────────────────────────────────────────
-  //  Connexion
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── Connexion ──────────────────────────────────────────────────────────
 
   Future<void> init(String sanctumToken) async {
-    _token = sanctumToken;
+    debugPrint('[WS] Init avec token ${sanctumToken.substring(0, 8)}...');
     await _connect();
   }
 
@@ -74,22 +59,13 @@ class RealtimeService {
       );
 
       _channel = WebSocketChannel.connect(uri);
-
-      // ⚠️ WebSocketChannel.connect() ne lève PAS l'échec de connexion
-      // via stream.listen(onError:). Il faut await .ready.
       await _channel!.ready;
 
       _connected = true;
 
-      _channel!.stream.listen(
-        _onMessage,
-        onError: _onError,
-        onDone: _onDone,
-      );
+      _channel!.stream.listen(_onMessage, onError: _onError, onDone: _onDone);
 
-      // Ping toutes les 30s pour garder la connexion vivante
       _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) => _ping());
-
       debugPrint('[WS] Connecté à Reverb');
     } catch (e) {
       debugPrint('[WS] Erreur connexion : $e');
@@ -104,13 +80,11 @@ class RealtimeService {
       final event = msg['event'] as String? ?? '';
       final chan  = msg['channel'] as String? ?? '';
 
-      // ── Ping/Pong Pusher ────────────────────────────────────────────────
       if (event == 'pusher:ping') {
         _send({'event': 'pusher:pong', 'data': {}});
         return;
       }
 
-      // ── Handshake initial ───────────────────────────────────────────────
       if (event == 'pusher:connection_established') {
         try {
           final data = msg['data'];
@@ -123,12 +97,10 @@ class RealtimeService {
         }
         debugPrint('[WS] Handshake OK (socket_id=$_socketId)');
 
-        // Re-souscrire à tous les canaux actifs
         for (final channel in _subscriptions.keys) {
           _subscribeChannel(channel);
         }
 
-        // Traiter les canaux en attente (arrivés avant le handshake)
         final pending = List<String>.from(_pendingSubscriptions);
         _pendingSubscriptions.clear();
         for (final channel in pending) {
@@ -137,7 +109,6 @@ class RealtimeService {
         return;
       }
 
-      // ── Diffusion aux controllers ──────────────────────────────────────
       final key = '$chan:$event';
       if (_controllers.containsKey(key)) {
         final data = msg['data'];
@@ -189,12 +160,9 @@ class RealtimeService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  //  Souscription aux canaux
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── Souscription ───────────────────────────────────────────────────────
 
   Future<void> _subscribeChannel(String channel) async {
-    // Canaux publics : pas d'auth
     if (!channel.startsWith('private-')) {
       _send({
         'event': 'pusher:subscribe',
@@ -203,26 +171,15 @@ class RealtimeService {
       return;
     }
 
-    // Canaux privés : on a besoin du socket_id
     if (_socketId == null) {
-      debugPrint('[WS] Abonnement à $channel mis en attente (socket_id pas prêt)');
+      debugPrint('[WS] Abonnement $channel mis en attente (socket_id absent)');
       _pendingSubscriptions.add(channel);
       return;
     }
 
-    // ⚠️ TOUJOURS rafraîchir le token Firebase avant chaque abonnement
-    // (les tokens expirent après 1h — sinon les réabonnements échouent en 401)
-    String? freshToken;
-    try {
-      freshToken = await firebase_auth.FirebaseAuth.instance.currentUser
-          ?.getIdToken(false);
-    } catch (e) {
-      debugPrint('[WS] Impossible de rafraîchir le token Firebase : $e');
-    }
-    freshToken ??= _token; // fallback Sanctum
-
-    if (freshToken == null) {
-      debugPrint('[WS] Abonnement à $channel différé (aucun token)');
+    final token = await _getFreshToken();
+    if (token == null) {
+      debugPrint('[WS] Abonnement $channel différé (aucun token)');
       _pendingSubscriptions.add(channel);
       return;
     }
@@ -235,7 +192,7 @@ class RealtimeService {
           'channel_name': channel,
         },
         options: Options(
-          headers: {'Authorization': 'Bearer $freshToken'},
+          headers: {'Authorization': 'Bearer $token'},
           contentType: 'application/json',
         ),
       );
@@ -248,14 +205,21 @@ class RealtimeService {
 
       _send({
         'event': 'pusher:subscribe',
-        'data': {
-          'channel': channel,
-          'auth':    auth,
-        },
+        'data': {'channel': channel, 'auth': auth},
       });
       debugPrint('[WS] Abonné à $channel');
     } catch (e) {
       debugPrint('[WS] Échec auth canal $channel : $e');
+    }
+  }
+
+  Future<String?> _getFreshToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('sanctum_token');
+    } catch (e) {
+      debugPrint('[WS] Impossible de lire le token : $e');
+      return null;
     }
   }
 
@@ -275,8 +239,6 @@ class RealtimeService {
       _controllers[key] = StreamController<Map<String, dynamic>>.broadcast();
       _subscriptions.putIfAbsent(channel, () => {}).add(event);
 
-      // Si on est déjà connecté et qu'on a un socket_id → souscrire tout de suite
-      // Sinon → la souscription sera faite automatiquement au handshake
       if (_connected && _socketId != null) {
         _subscribeChannel(channel);
       } else {
@@ -287,9 +249,7 @@ class RealtimeService {
     return _controllers[key]!.stream;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  //  Déconnexion
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── Déconnexion ────────────────────────────────────────────────────────
 
   Future<void> disconnect() async {
     _pingTimer?.cancel();
