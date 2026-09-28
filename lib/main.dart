@@ -1,5 +1,11 @@
+// lib/main.dart
+// ─────────────────────────────────────────────────────────────────────────────
+// Point d'entrée de VigiRoutes Client.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import 'dart:async';
 import 'dart:isolate';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -7,16 +13,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/date_symbol_data_local.dart'; // FIX : initialisation locale intl
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
+
 import 'core/services/api_service.dart';
 import 'core/services/notification_router_service.dart';
 import 'core/services/service_type_service.dart';
 import 'features/auth/controllers/auth_controller.dart';
 import 'firebase_options.dart';
 import 'shared/navigation/app_router.dart';
-
-// ── Canal Android notifications interventions ──────────────────────────────
 
 const AndroidNotificationChannel _interventionChannel = AndroidNotificationChannel(
   'intervention_updates',
@@ -31,12 +36,9 @@ final FlutterLocalNotificationsPlugin _localNotifications =
     FlutterLocalNotificationsPlugin();
 
 // ── Handler background / terminated ──────────────────────────────────────
-//
-// Tourne dans un isolate séparé. Affiche une notification locale
-// pour les types importants (intervention_update, no_provider, etc.).
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // FIX : try/catch au cas où Firebase est déjà initialisé dans cet isolate.
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (_) {}
@@ -44,7 +46,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final data = message.data;
   final type = data['type'] as String?;
 
-  // Types qui méritent une notification locale en background
   const handledTypes = {
     'intervention_update',
     'no_provider',
@@ -82,7 +83,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         'Mises à jour interventions',
         channelDescription: "Notifications de suivi de vos demandes d'assistance",
         importance: type == 'emergency' ? Importance.max : Importance.high,
-        priority : type == 'emergency' ? Priority.max  : Priority.high,
+        priority: type == 'emergency' ? Priority.max : Priority.high,
         fullScreenIntent: type == 'emergency',
         playSound: true,
         enableVibration: true,
@@ -126,19 +127,21 @@ String _bodyForData(Map<String, dynamic> data) {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // FIX : initialiser les données de locale fr avant tout affichage de date.
-  // Sans cet appel, DateFormat('...', 'fr') lève LocaleDataException.
   await initializeDateFormatting('fr', null);
 
+  // FIX : Directionality requis pour utiliser Material hors MaterialApp
   ErrorWidget.builder = (FlutterErrorDetails details) => Material(
         color: const Color(0xFF8B0000),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
-          alignment: Alignment.topLeft,
-          child: SingleChildScrollView(
-            child: Text(
-              'ERREUR UI:\n\n${details.exceptionAsString()}',
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+            alignment: Alignment.topLeft,
+            child: SingleChildScrollView(
+              child: Text(
+                'ERREUR UI:\n\n${details.exceptionAsString()}',
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
             ),
           ),
         ),
@@ -149,27 +152,36 @@ void main() async {
   );
 
   // ── Crashlytics ──────────────────────────────────────────────────────────
-  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  await FirebaseCrashlytics.instance
+      .setCrashlyticsCollectionEnabled(!kDebugMode);
+
+  FlutterError.onError =
+      FirebaseCrashlytics.instance.recordFlutterFatalError;
+
   PlatformDispatcher.instance.onError = (error, stack) {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
-  // FIX : stocker le port pour éviter qu'il soit GC'd immédiatement.
-  final _errorPort = RawReceivePort((pair) async {
+
+  // FIX : variable sans underscore (no_leading_underscores_for_local_identifiers)
+  final errorPort = RawReceivePort((pair) async {
     final list = pair as List<dynamic>;
     await FirebaseCrashlytics.instance.recordError(
-      list.first, list.last as StackTrace?, fatal: true,
+      list.first,
+      list.last as StackTrace?,
+      fatal: true,
     );
   });
-  Isolate.current.addErrorListener(_errorPort.sendPort);
+  Isolate.current.addErrorListener(errorPort.sendPort);
 
   // ── FCM background handler ───────────────────────────────────────────────
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // ── Permissions FCM ──────────────────────────────────────────────────────
   await FirebaseMessaging.instance.requestPermission(
-    alert: true, sound: true, badge: true,
+    alert: true,
+    sound: true,
+    badge: true,
   );
 
   // ── flutter_local_notifications — canal Android ──────────────────────────
@@ -183,19 +195,20 @@ void main() async {
       ),
     ),
   );
+
   await _localNotifications
-      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(_interventionChannel);
 
   // ── Services ─────────────────────────────────────────────────────────────
   ApiService.instance.init();
   await ServiceTypeService.instance.load();
+
   NotificationRouterService.instance.init();
 
   runApp(const VigiRoutesApp());
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 class VigiRoutesApp extends StatelessWidget {
   const VigiRoutesApp({super.key});
@@ -209,6 +222,7 @@ class VigiRoutesApp extends StatelessWidget {
 
 class _RouterWidget extends StatefulWidget {
   const _RouterWidget();
+
   @override
   State<_RouterWidget> createState() => _RouterWidgetState();
 }
@@ -220,6 +234,16 @@ class _RouterWidgetState extends State<_RouterWidget> {
   void initState() {
     super.initState();
     _router = buildRouter(context.read<AuthController>());
+
+    // FIX COLD START : consomme la route en attente dès que le router est prêt.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final (route, extra) =
+          NotificationRouterService.instance.consumePendingRoute();
+      if (route != null) {
+        debugPrint('[Nav] Navigation post-mount vers : $route');
+        _router.push(route, extra: extra);
+      }
+    });
   }
 
   @override
@@ -234,7 +258,8 @@ class _RouterWidgetState extends State<_RouterWidget> {
             style: ElevatedButton.styleFrom(
               minimumSize: const Size(double.infinity, 52),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
           ),
         ),

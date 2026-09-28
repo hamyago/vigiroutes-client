@@ -1,26 +1,24 @@
-// services/notification_router_service.dart
+// lib/core/services/notification_router_service.dart
+// ─────────────────────────────────────────────────────────────────────────────
 // Centralise la réaction aux notifications push reçues côté Client.
+//
+// ⚠️ COLD START : getInitialMessage() peut résoudre AVANT que le router soit
+// monté. Dans ce cas, on stocke la route dans _pendingRoute et le router
+// la consomme dès son initState (voir _RouterWidgetState dans main.dart).
 //
 // Types FCM gérés :
 //   - intervention_update  → /user/tracking/:id
 //   - no_provider          → snackbar
 //   - emergency            → /user/emergency
 //   - city_welcome         → /user/city-welcome
-//   - booking_confirmed    → /ct/booking?booking_id=...&action=open_booking_qr
-//   - vehicle_at_center    → /ct/booking?booking_id=...
-//   - vt_result            → /ct/booking?booking_id=...&result=...
-//   - transport_update     → /ct/booking?booking_id=...&provider_status=...
-//   - vt_reminder_7d       → /ct/vehicles?vehicle_id=...  (+ snackbar warning)
-//   - vt_reminder_3d       → /ct/vehicles?vehicle_id=...  (+ snackbar critical)
-//   - vt_reminder_1d       → /ct/vehicles?vehicle_id=...  (+ snackbar critical)
+//   - booking_confirmed    → /ct/booking?...
+//   - vehicle_at_center    → /ct/booking?...
+//   - vt_result            → /ct/booking?...
+//   - transport_update     → /ct/booking?...
+//   - vt_reminder_*        → /ct/vehicles?vehicle_id=...
 //   - vt_expired           → /ct/vehicles?vehicle_id=...
-//
-// Note : la déduplication de city_welcome n'est plus nécessaire ici.
-// Le fix est architectural : HomeController ne déclenche plus la détection
-// de ville à chaque tick de 30 s (voir home_controller.dart + api_service.dart
-// + ProvidersController.php). Le backend envoie donc la notification une seule
-// fois — au premier chargement ou quand l'utilisateur entre dans une nouvelle
-// ville après s'être déplacé de plus de 5 km.
+//   - ct_quote_received    → /ct/quote/:id
+// ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -35,17 +33,32 @@ class NotificationRouterService {
 
   final _localNotifications = FlutterLocalNotificationsPlugin();
 
+  /// Route en attente si le router n'est pas encore monté (cold start).
+  String? _pendingRoute;
+  Object? _pendingExtra;
+
+  /// Appelé par le router après montage pour récupérer la route en attente.
+  (String?, Object?) consumePendingRoute() {
+    final r = _pendingRoute;
+    final e = _pendingExtra;
+    _pendingRoute = null;
+    _pendingExtra = null;
+    return (r, e);
+  }
+
   /// À appeler une seule fois dans main(), après l'initialisation de Firebase
   /// et de flutter_local_notifications.
   void init() {
     FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
+
     FirebaseMessaging.instance
         .getInitialMessage()
         .then((message) { if (message != null) _handleTap(message); });
+
     FirebaseMessaging.onMessage.listen(_handleForeground);
   }
 
-  // ─── Foreground ─────────────────────────────────────────────────────────────
+  // ─── Foreground ─────────────────────────────────────────────────────────
 
   void _handleForeground(RemoteMessage message) {
     final type = message.data['type'] as String?;
@@ -55,14 +68,17 @@ class NotificationRouterService {
     final title = notification?.title ?? _titleForType(type);
     final body  = notification?.body  ?? _bodyForData(message.data);
 
-    _showLocalNotification(type: type, title: title, body: body, data: message.data);
+    _showLocalNotification(
+      type: type, title: title, body: body, data: message.data,
+    );
 
     switch (type) {
       case 'city_welcome':
         _showSnackbar(body,
             action: SnackBarAction(
                 label: 'Voir',
-                onPressed: () => _navigate('/user/city-welcome', extra: message.data)));
+                onPressed: () => _navigate('/user/city-welcome',
+                    extra: message.data)));
 
       case 'intervention_update':
         _showSnackbar(body, action: _interventionAction(message.data));
@@ -76,7 +92,6 @@ class NotificationRouterService {
                 label: 'Voir',
                 onPressed: () => _navigate('/user/emergency')));
 
-      // ── CT reminders ──────────────────────────────────────────────────────
       case 'vt_reminder_7d':
         _showSnackbar(body,
             isWarning: true,
@@ -99,7 +114,6 @@ class NotificationRouterService {
                 label: 'Réserver',
                 onPressed: () => _navigateToCT(message.data)));
 
-      // ── Autres CT ─────────────────────────────────────────────────────────
       case 'booking_confirmed':
       case 'vehicle_at_center':
       case 'vt_result':
@@ -123,7 +137,7 @@ class NotificationRouterService {
     }
   }
 
-  // ─── Tap (background / cold start) ─────────────────────────────────────────
+  // ─── Tap (background / cold start) ──────────────────────────────────────
 
   void _handleTap(RemoteMessage message) {
     final type = message.data['type'] as String?;
@@ -140,7 +154,6 @@ class NotificationRouterService {
       case 'emergency':
         _navigate('/user/emergency');
 
-      // Rappels CT → ouvrir la fiche véhicule + proposer RDV
       case 'vt_reminder_7d':
       case 'vt_reminder_3d':
       case 'vt_reminder_1d':
@@ -167,7 +180,7 @@ class NotificationRouterService {
     }
   }
 
-  // ─── Notification locale foreground ─────────────────────────────────────────
+  // ─── Notification locale foreground ─────────────────────────────────────
 
   Future<void> _showLocalNotification({
     required String type,
@@ -189,7 +202,7 @@ class NotificationRouterService {
             'intervention_updates',
             'Mises à jour interventions',
             channelDescription:
-                'Notifications de suivi de vos demandes d\'assistance',
+                "Notifications de suivi de vos demandes d'assistance",
             importance: isCritical ? Importance.max : Importance.high,
             priority:   isCritical ? Priority.max  : Priority.high,
             fullScreenIntent: type == 'emergency',
@@ -204,12 +217,10 @@ class NotificationRouterService {
           ),
         ),
       );
-    } catch (_) {
-      // flutter_local_notifications non initialisé → le snackbar suffit
-    }
+    } catch (_) {}
   }
 
-  // ─── Helpers ────────────────────────────────────────────────────────────────
+  // ─── Helpers ────────────────────────────────────────────────────────────
 
   void _navigateToCT(Map<String, dynamic> data) {
     final params = <String, String>{};
@@ -271,13 +282,26 @@ class NotificationRouterService {
     );
   }
 
+  /// ⚠️ FIX COLD START : si le router n'est pas encore monté, on stocke la
+  /// route dans _pendingRoute. Le router la consomme dès son initState.
   void _navigate(String route, {Object? extra}) {
     final context = navigatorKey.currentContext;
-    if (context == null) return;
-    context.push(route, extra: extra);
+    if (context == null) {
+      debugPrint('[Nav] Router non monté, mise en attente : $route');
+      _pendingRoute = route;
+      _pendingExtra = extra;
+      return;
+    }
+    try {
+      context.push(route, extra: extra);
+    } catch (e) {
+      debugPrint('[Nav] Échec push immédiat, mise en attente : $e');
+      _pendingRoute = route;
+      _pendingExtra = extra;
+    }
   }
 
-  // ─── Labels par type ────────────────────────────────────────────────────────
+  // ─── Labels par type ────────────────────────────────────────────────────
 
   String _titleForType(String type) => switch (type) {
         'intervention_update' => '🚗 Mise à jour intervention',
@@ -303,7 +327,7 @@ class NotificationRouterService {
       'vt_reminder_3d'  => '$immat — contrôle technique dans 3 jours ! Prenez rendez-vous.',
       'vt_reminder_1d'  => '$immat — contrôle technique DEMAIN ! Réservez maintenant.',
       'vt_expired'      => '$immat — contrôle technique expiré. Régularisez rapidement.',
-      'no_provider'     => 'Aucun prestataire n\'est disponible pour le moment.',
+      'no_provider'     => "Aucun prestataire n'est disponible pour le moment.",
       _                 => 'Appuyez pour voir les détails.',
     };
   }
