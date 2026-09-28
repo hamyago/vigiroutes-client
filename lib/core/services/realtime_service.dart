@@ -1,39 +1,65 @@
+// lib/core/services/realtime_service.dart
+// ─────────────────────────────────────────────────────────────────────────────
+// Service WebSocket natif — compatible avec Laravel Reverb.
+//
+// Remplace pusher_channels_flutter (incompatible AGP 8.11+).
+//
+// ⚠️ CONTRAT BACKEND (validé le 28/09/2026) :
+//   - Endpoint auth : POST /api/user/broadcasting/auth
+//   - Headers : Authorization: Bearer <firebase_id_token>
+//   - Body : { socket_id, channel_name }
+//   - Réponse : { auth: "key:signature" }
+//
+// Canaux utilisés :
+//   - private-user.{userId}        → intervention.updated
+//   - private-admin.interventions  → intervention.updated, emergency.created
+//
+// ⚠️ Le token Firebase DOIT être rafraîchi avant chaque abonnement à un
+//    canal privé — les tokens Firebase expirent au bout d'1h. Sans ça,
+//    tous les abonnements échouent silencieusement après la première heure.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-/// Service WebSocket natif — compatible avec Laravel Reverb
-/// Remplace pusher_channels_flutter (incompatible AGP 8.11+)
 class RealtimeService {
   RealtimeService._();
   static final RealtimeService instance = RealtimeService._();
 
-  static const String _host      = 'api.vigiroutes.com';
-  static const String _appKey    = '642e796713cd4093e508862ee725e601';
-  static const int    _port      = 443;
-  // BUG CORRIGÉ : cette app est un CLIENT — l'auth des canaux privés doit
-  // passer par le groupe de routes 'user' (middleware firebase.user), pas
-  // 'provider'. Sinon $request->user() ne résout pas le bon modèle et
-  // routes/channels.php refuse l'abonnement.
-  static const String _authUrl   = 'https://$_host/api/user/broadcasting/auth';
+  static const String _host   = 'api.vigiroutes.com';
+  static const String _appKey = '642e796713cd4093e508862ee725e601';
+  static const int    _port   = 443;
+  static const String _authUrl = 'https://$_host/api/user/broadcasting/auth';
 
   WebSocketChannel? _channel;
-  String?           _token;
+  String?           _token;    // token Sanctum (fallback)
   String?           _socketId;
   bool              _connected = false;
-  Timer?            _pingTimer;
-  Timer?            _reconnectTimer;
-  final Dio         _authDio = Dio();
 
-  final Map<String, StreamController<Map<String,dynamic>>> _controllers = {};
-  final Map<String, Set<String>> _subscriptions = {}; // channel → events
+  Timer? _pingTimer;
+  Timer? _reconnectTimer;
+
+  final Dio _authDio = Dio();
+
+  /// Un StreamController par (channel, event).
+  final Map<String, StreamController<Map<String, dynamic>>> _controllers = {};
+
+  /// Canaux actifs → set d'events souscrits.
+  final Map<String, Set<String>> _subscriptions = {};
+
+  /// Canaux en attente de socket_id (race condition au démarrage).
+  final Set<String> _pendingSubscriptions = {};
 
   bool get isConnected => _connected;
 
-  // ── Connexion ──────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  //  Connexion
+  // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> init(String sanctumToken) async {
     _token = sanctumToken;
@@ -49,11 +75,8 @@ class RealtimeService {
 
       _channel = WebSocketChannel.connect(uri);
 
-      // BUG CORRIGÉ : WebSocketChannel.connect() ne lève PAS l'échec de
-      // connexion (DNS, hôte injoignable, etc.) de façon fiable via
-      // stream.listen(onError: ...) — problème connu du package. Sans ce
-      // `await ... .ready`, une simple coupure réseau/DNS remontait comme
-      // exception non rattrapée jusqu'au gestionnaire d'erreur global.
+      // ⚠️ WebSocketChannel.connect() ne lève PAS l'échec de connexion
+      // via stream.listen(onError:). Il faut await .ready.
       await _channel!.ready;
 
       _connected = true;
@@ -61,7 +84,7 @@ class RealtimeService {
       _channel!.stream.listen(
         _onMessage,
         onError: _onError,
-        onDone:  _onDone,
+        onDone: _onDone,
       );
 
       // Ping toutes les 30s pour garder la connexion vivante
@@ -77,20 +100,17 @@ class RealtimeService {
 
   void _onMessage(dynamic raw) {
     try {
-      final msg  = jsonDecode(raw as String) as Map<String, dynamic>;
-      final event= msg['event'] as String? ?? '';
+      final msg = jsonDecode(raw as String) as Map<String, dynamic>;
+      final event = msg['event'] as String? ?? '';
       final chan  = msg['channel'] as String? ?? '';
 
-      // Répondre au ping Pusher
+      // ── Ping/Pong Pusher ────────────────────────────────────────────────
       if (event == 'pusher:ping') {
         _send({'event': 'pusher:pong', 'data': {}});
         return;
       }
 
-      // Connexion établie — récupérer le socket_id, indispensable pour
-      // authentifier ensuite les canaux privés (BUG CORRIGÉ : jamais
-      // capturé avant, donc l'auth des canaux privés était impossible
-      // même une fois la signature du serveur obtenue).
+      // ── Handshake initial ───────────────────────────────────────────────
       if (event == 'pusher:connection_established') {
         try {
           final data = msg['data'];
@@ -99,25 +119,33 @@ class RealtimeService {
               : Map<String, dynamic>.from(data as Map);
           _socketId = parsed['socket_id'] as String?;
         } catch (e) {
-          debugPrint('[WS] Impossible de lire le socket_id: $e');
+          debugPrint('[WS] Impossible de lire le socket_id : $e');
         }
-        debugPrint('[WS] Handshake Reverb OK (socket_id=$_socketId)');
-        // Re-souscrire aux canaux actifs après reconnexion
+        debugPrint('[WS] Handshake OK (socket_id=$_socketId)');
+
+        // Re-souscrire à tous les canaux actifs
         for (final channel in _subscriptions.keys) {
+          _subscribeChannel(channel);
+        }
+
+        // Traiter les canaux en attente (arrivés avant le handshake)
+        final pending = List<String>.from(_pendingSubscriptions);
+        _pendingSubscriptions.clear();
+        for (final channel in pending) {
           _subscribeChannel(channel);
         }
         return;
       }
 
-      // Diffuser aux controllers abonnés
+      // ── Diffusion aux controllers ──────────────────────────────────────
       final key = '$chan:$event';
       if (_controllers.containsKey(key)) {
         final data = msg['data'];
-        Map<String,dynamic> parsed;
+        Map<String, dynamic> parsed;
         if (data is String) {
-          parsed = jsonDecode(data) as Map<String,dynamic>;
+          parsed = jsonDecode(data) as Map<String, dynamic>;
         } else if (data is Map) {
-          parsed = Map<String,dynamic>.from(data);
+          parsed = Map<String, dynamic>.from(data);
         } else {
           parsed = {};
         }
@@ -161,43 +189,41 @@ class RealtimeService {
     }
   }
 
-  // ── Souscription aux canaux privés ─────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  //  Souscription aux canaux
+  // ─────────────────────────────────────────────────────────────────────────
 
-  /// BUG CORRIGÉ : envoyait 'auth': '' (chaîne vide) en supposant que
-  /// Reverb générait l'authentification côté serveur automatiquement —
-  /// faux. Pour un canal privé, c'est le CLIENT qui doit demander une
-  /// signature au serveur (POST /broadcasting/auth avec channel_name +
-  /// socket_id + le token Firebase), signature que Reverb vérifie avant
-  /// d'accepter l'abonnement. Sans ça, Reverb rejette silencieusement
-  /// tout abonnement à un canal privé — aucune mise à jour temps réel
-  /// (statut, position du prestataire) n'a jamais pu arriver.
   Future<void> _subscribeChannel(String channel) async {
+    // Canaux publics : pas d'auth
     if (!channel.startsWith('private-')) {
-      _send({'event': 'pusher:subscribe', 'data': {'channel': channel}});
+      _send({
+        'event': 'pusher:subscribe',
+        'data': {'channel': channel},
+      });
       return;
     }
 
+    // Canaux privés : on a besoin du socket_id
     if (_socketId == null) {
-      debugPrint('[WS] Abonnement à $channel différé (socket_id pas encore prêt)');
+      debugPrint('[WS] Abonnement à $channel mis en attente (socket_id pas prêt)');
+      _pendingSubscriptions.add(channel);
       return;
     }
 
-    // BUG CORRIGÉ : utilisait _token, un jeton Firebase figé au moment du
-    // login (jamais rafraîchi ensuite) — les jetons Firebase expirent au
-    // bout d'1h. Confirmé via les logs nginx côté serveur : requêtes
-    // /broadcasting/auth bien envoyées mais rejetées en 401. Même
-    // principe que ApiService (qui redemande un jeton frais à chaque
-    // requête) appliqué ici.
+    // ⚠️ TOUJOURS rafraîchir le token Firebase avant chaque abonnement
+    // (les tokens expirent après 1h — sinon les réabonnements échouent en 401)
     String? freshToken;
     try {
       freshToken = await firebase_auth.FirebaseAuth.instance.currentUser
           ?.getIdToken(false);
     } catch (e) {
-      debugPrint('[WS] Impossible de rafraîchir le jeton Firebase : $e');
+      debugPrint('[WS] Impossible de rafraîchir le token Firebase : $e');
     }
-    freshToken ??= _token;
+    freshToken ??= _token; // fallback Sanctum
+
     if (freshToken == null) {
-      debugPrint('[WS] Abonnement à $channel différé (aucun jeton disponible)');
+      debugPrint('[WS] Abonnement à $channel différé (aucun token)');
+      _pendingSubscriptions.add(channel);
       return;
     }
 
@@ -213,11 +239,13 @@ class RealtimeService {
           contentType: 'application/json',
         ),
       );
+
       final auth = response.data['auth'] as String?;
       if (auth == null) {
         debugPrint('[WS] Auth vide reçue pour $channel');
         return;
       }
+
       _send({
         'event': 'pusher:subscribe',
         'data': {
@@ -231,38 +259,53 @@ class RealtimeService {
     }
   }
 
-  Stream<Map<String,dynamic>> subscribeToIntervention(String userId) =>
+  Stream<Map<String, dynamic>> subscribeToIntervention(String userId) =>
       _subscribe('private-user.$userId', 'intervention.updated');
 
-  Stream<Map<String,dynamic>> subscribeToAdminInterventions() =>
+  Stream<Map<String, dynamic>> subscribeToAdminInterventions() =>
       _subscribe('private-admin.interventions', 'intervention.updated');
 
-  Stream<Map<String,dynamic>> subscribeToEmergencies() =>
+  Stream<Map<String, dynamic>> subscribeToEmergencies() =>
       _subscribe('private-admin.interventions', 'emergency.created');
 
-  Stream<Map<String,dynamic>> _subscribe(String channel, String event) {
+  Stream<Map<String, dynamic>> _subscribe(String channel, String event) {
     final key = '$channel:$event';
 
     if (!_controllers.containsKey(key)) {
-      _controllers[key] = StreamController<Map<String,dynamic>>.broadcast();
+      _controllers[key] = StreamController<Map<String, dynamic>>.broadcast();
       _subscriptions.putIfAbsent(channel, () => {}).add(event);
-      if (_connected) _subscribeChannel(channel);
+
+      // Si on est déjà connecté et qu'on a un socket_id → souscrire tout de suite
+      // Sinon → la souscription sera faite automatiquement au handshake
+      if (_connected && _socketId != null) {
+        _subscribeChannel(channel);
+      } else {
+        _pendingSubscriptions.add(channel);
+      }
     }
 
     return _controllers[key]!.stream;
   }
 
-  // ── Déconnexion ────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  //  Déconnexion
+  // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> disconnect() async {
     _pingTimer?.cancel();
     _reconnectTimer?.cancel();
-    await _channel?.sink.close();
+
+    try {
+      await _channel?.sink.close();
+    } catch (_) {}
+
     for (final ctrl in _controllers.values) {
       await ctrl.close();
     }
     _controllers.clear();
     _subscriptions.clear();
+    _pendingSubscriptions.clear();
+    _socketId = null;
     _connected = false;
     debugPrint('[WS] Déconnecté');
   }
