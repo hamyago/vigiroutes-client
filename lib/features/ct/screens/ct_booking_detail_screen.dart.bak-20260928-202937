@@ -3,7 +3,6 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/vehicle_model.dart';
 import '../../../core/services/ct_service.dart';
-import '../widgets/transport_timeline.dart';
 
 class CtBookingDetailScreen extends StatefulWidget {
   final String bookingId;
@@ -187,12 +186,6 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
             _InfoRow(label: 'Téléphone', value: b.center.contactPhone!),
         ]),
         const SizedBox(height: 16),
-
-        // ── Suivi du transport (si tow/driver) ────────────────────────
-        if (b.hasTransportTracking) ...[
-          TransportTimeline(booking: b),
-          const SizedBox(height: 16),
-        ],
 
         // ── QR code conditionnel (Option D) ─────────────────────────────────
         // Le QR est affiché tant que le créneau est dans le futur OU
