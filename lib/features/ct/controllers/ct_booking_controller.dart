@@ -307,6 +307,12 @@ class CtBookingController extends ChangeNotifier {
 
   // ── Fees (calculés par le backend et renvoyés dans le booking) ───────────
 
+  /// Frais de remorquage (prévisualisation).
+  double get towFee => 5000;
+
+  /// Frais de chauffeur (prévisualisation).
+  double get driverFee => 8000;
+
   /// Frais du contrôle technique.
   /// Priorité : valeur renvoyée par le backend après création du booking.
   /// Fallback : montant du devis si on vient d'un hint.
