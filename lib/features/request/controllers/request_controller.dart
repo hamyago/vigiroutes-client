@@ -184,6 +184,18 @@ class RequestController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Force le retour à l'étape de sélection initiale.
+  /// Utilisé après une annulation de recherche pour éviter de retomber
+  /// sur l'écran "Confirmer la demande".
+  void returnToSelectStep() {
+    _submitError           = SubmitError.none;
+    _error                 = null;
+    _step                  = RequestStep.selectService;
+    _selectedProvider      = null;
+    _createdInterventionId = null;
+    notifyListeners();
+  }
+
   void goBack() {
     _submitError = SubmitError.none;
     _error       = null;

@@ -157,9 +157,16 @@ class _RequestScreenState extends State<RequestScreen> {
       }
     }
 
-    // 3. Reset état
+    // 3. Reset état local
     _searchingInterventionId = null;
-    if (mounted) setState(() { _isSearching = false; });
+    if (!mounted) return;
+
+    setState(() { _isSearching = false; _providerFound = false; });
+
+    // ⚡ FIX : revenir à l'étape de sélection (sinon on retombe sur
+    // "Confirmer la demande" car le body retombe sur _buildCurrentStep).
+    final ctrl = context.read<RequestController>();
+    ctrl.returnToSelectStep();
   }
 
   Future<void> _showNoProviderDialog({
@@ -726,9 +733,6 @@ class _ConfirmStep extends StatefulWidget {
 }
 
 class _ConfirmStepState extends State<_ConfirmStep> {
-  // Mode de transport sélectionné par le client
-  // 'self' = je me déplace | 'tow' = remorquage | 'driver' = chauffeur affecté
-  String _transportMode = 'self';
 
   // Tarif chargé depuis l'API
   TariffModel? _tariff;
@@ -817,20 +821,9 @@ class _ConfirmStepState extends State<_ConfirmStep> {
           ),
           const SizedBox(height: 16),
 
-          // ── Choix mode de transport ─────────────────────────────────────
-          const Text('Mode de transport',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-          const SizedBox(height: 4),
-          const Text(
-            'Comment souhaitez-vous amener votre véhicule ?',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-          ),
-          const SizedBox(height: 10),
-          _TransportSelector(
-            selected: _transportMode,
-            onSelect: (m) => setState(() => _transportMode = m),
-          ),
-          const SizedBox(height: 16),
+          // ⚡ MODE TRANSPORT SUPPRIMÉ : ce widget appartient au flux CT
+          // (contrôle technique), pas au flux dépannage.
+          const SizedBox(height: 8),
 
           // ── Détail des frais ─────────────────────────────────────────────
           if (_tariffLoading)
@@ -841,7 +834,7 @@ class _ConfirmStepState extends State<_ConfirmStep> {
           else ...[
             _FraisCard(
               tariff: _tariff,
-              transportMode: _transportMode,
+              transportMode: 'self',
               baseEstimate: ctrl.estimate != null
                   ? _estimateNum(ctrl.estimate!['base_price']) +
                       _estimateNum(ctrl.estimate!['km_cost'])
@@ -881,7 +874,7 @@ class _ConfirmStepState extends State<_ConfirmStep> {
               if (auth.user == null) return;
               final ok = await ctrl.submitRequest(
                 user: auth.user!,
-                transportMode: _transportMode,
+                transportMode: 'self',
               );
               if (!ok || !context.mounted) return;
 
@@ -922,74 +915,7 @@ class _ConfirmStepState extends State<_ConfirmStep> {
       };
 }
 
-// ── Sélecteur de transport ────────────────────────────────────────────────────
 
-class _TransportSelector extends StatelessWidget {
-  final String selected;
-  final void Function(String) onSelect;
-  const _TransportSelector({required this.selected, required this.onSelect});
-
-  @override
-  Widget build(BuildContext context) {
-    const options = [
-      ('self',   '🚗', 'Je me déplace',       'Par mes propres moyens'),
-      ('tow',    '🚛', 'Remorquage',           'Le véhicule est tracté'),
-      ('driver', '🧑‍✈️', 'Chauffeur affecté',  'Un chauffeur conduit pour vous'),
-    ];
-    return Column(
-      children: options.map((o) {
-        final isSelected = selected == o.$1;
-        return GestureDetector(
-          onTap: () => onSelect(o.$1),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? AppColors.primary.withValues(alpha: 0.06)
-                  : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSelected ? AppColors.primary : AppColors.border,
-                width: isSelected ? 1.5 : 1,
-              ),
-              boxShadow: isSelected
-                  ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.08), blurRadius: 6)]
-                  : [],
-            ),
-            child: Row(children: [
-              Text(o.$2, style: const TextStyle(fontSize: 22)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(o.$3,
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.textPrimary)),
-                    Text(o.$4,
-                        style: const TextStyle(
-                            fontSize: 11, color: AppColors.textMuted)),
-                  ],
-                ),
-              ),
-              if (isSelected)
-                const Icon(Icons.check_circle,
-                    color: AppColors.primary, size: 20),
-            ]),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-// ── Carte détail des frais ────────────────────────────────────────────────────
 
 class _FraisCard extends StatelessWidget {
   final TariffModel? tariff;
