@@ -47,6 +47,7 @@ class _RequestScreenState extends State<RequestScreen> {
 
   bool    _providerFound         = false;
   String? _foundInterventionId;
+  bool    _cancelledByUser       = false;
 
   StreamSubscription<RemoteMessage>? _fcmSubscription;
 
@@ -66,8 +67,11 @@ class _RequestScreenState extends State<RequestScreen> {
         FirebaseMessaging.onMessage.listen(_onFcmDuringSearch);
   }
 
-  void _onFcmDuringSearch(RemoteMessage message) {
+  Future<void> _onFcmDuringSearch(RemoteMessage message) async {
     if (!mounted || !_isSearching) return;
+    // Si l'utilisateur a déjà annulé volontairement, on ignore les FCM
+    if (_cancelledByUser) return;
+
     final type = message.data['type'] as String?;
     final id   = message.data['intervention_id'] as String?;
 
@@ -75,35 +79,64 @@ class _RequestScreenState extends State<RequestScreen> {
         id == null || id == _searchingInterventionId;
     if (!isOurIntervention) return;
 
+    // ── FCM : aucun prestataire dispo ──
     if (type == 'no_provider') {
-      _cancelSearch();
-      _showNoProviderDialog();
-    } else if (type == 'intervention_update') {
+      _stopSearchLocally();
+      if (mounted) _showNoProviderDialog();
+      return;
+    }
+
+    // ── FCM : mise à jour du statut ──
+    if (type == 'intervention_update') {
       final status = message.data['status'] as String?;
+
       if (status == 'accepted' ||
           status == 'dispatched' ||
           status == 'en_route') {
-        _cancelSearch();
+        // ⚡ FIX CRITIQUE : NE PAS appeler _cancelSearch() ici !
+        // Sinon on annule l'intervention que le pro vient d'accepter.
+        _stopSearchLocally();
         if (id != null && mounted) {
           setState(() {
             _providerFound       = true;
             _foundInterventionId = id;
           });
         }
-      } else if (status == 'cancelled' ||
+        return;
+      }
+
+      if (status == 'cancelled' ||
           status == 'rejected' ||
           status == 'failed') {
-        _cancelSearch();
-        _showNoProviderDialog(
-          title: 'Demande annulee',
-          message: 'La demande a ete annulee. Veuillez reessayer.',
-        );
+        _stopSearchLocally();
+        if (mounted) {
+          _showNoProviderDialog(
+            title: 'Demande annulee',
+            message: 'La demande a ete annulee. Veuillez reessayer.',
+          );
+        }
+        return;
       }
     }
   }
 
+  /// Arrête la recherche LOCALEMENT (timers + FCM listener).
+  /// Ne fait AUCUN appel API — utilisé pour les changements de statut
+  /// déclenchés par le serveur (acceptation, refus, etc.).
+  void _stopSearchLocally() {
+    _searchTimeoutTimer?.cancel();
+    _searchTimeoutTimer = null;
+    _fcmSubscription?.cancel();
+    _fcmSubscription = null;
+    if (mounted) setState(() => _isSearching = false);
+  }
+
+  /// Annulation VOLONTAIRE par l'utilisateur (bouton "Annuler la recherche").
+  /// Appelle l'API pour arrêter le dispatch côté backend.
   Future<void> _cancelSearch() async {
     final interventionId = _searchingInterventionId;
+
+    _cancelledByUser = true;
 
     // 1. Annuler les timers locaux
     _searchTimeoutTimer?.cancel();
@@ -121,7 +154,6 @@ class _RequestScreenState extends State<RequestScreen> {
         debugPrint('[Request] Annulation backend OK');
       } catch (e) {
         debugPrint('[Request] Annulation backend erreur (ignorée): $e');
-        // On ignore : l'utilisateur veut quitter, on ne bloque pas
       }
     }
 
