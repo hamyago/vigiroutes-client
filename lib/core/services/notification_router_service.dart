@@ -84,7 +84,9 @@ class NotificationRouterService {
         _showSnackbar(body, action: _interventionAction(message.data));
 
       case 'no_provider':
-        _showSnackbar('Aucun prestataire disponible pour le moment.');
+        // no_provider snackbar désactivé : le RequestScreen affiche déjà
+        // un dialog dédié (_showNoProviderDialog). Éviter le doublon.
+        break;
 
       case 'emergency':
         _showSnackbar('🚨 Urgence activée',
