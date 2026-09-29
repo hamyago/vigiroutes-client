@@ -53,7 +53,8 @@ class _RequestScreenState extends State<RequestScreen> {
   void _startSearchTimeout(String interventionId) {
     _searchingInterventionId = interventionId;
     _searchTimeoutTimer?.cancel();
-    _searchTimeoutTimer = Timer(const Duration(seconds: 60), () {
+    // ⚡ Aligné avec le backend (cascade 10 prestataires × 30s = 5 min)
+    _searchTimeoutTimer = Timer(const Duration(minutes: 5), () {
       if (!mounted || !_isSearching) return;
       setState(() { _isSearching = false; });
       _showNoProviderDialog();
@@ -101,12 +102,31 @@ class _RequestScreenState extends State<RequestScreen> {
     }
   }
 
-  void _cancelSearch() {
+  Future<void> _cancelSearch() async {
+    final interventionId = _searchingInterventionId;
+
+    // 1. Annuler les timers locaux
     _searchTimeoutTimer?.cancel();
     _searchTimeoutTimer = null;
-    _searchingInterventionId = null;
     _fcmSubscription?.cancel();
     _fcmSubscription = null;
+
+    // 2. Annulation backend (sinon le dispatch continue en arrière-plan !)
+    if (interventionId != null) {
+      try {
+        await ApiService.instance.cancelIntervention(
+          interventionId,
+          reason: 'user_cancelled',
+        );
+        debugPrint('[Request] Annulation backend OK');
+      } catch (e) {
+        debugPrint('[Request] Annulation backend erreur (ignorée): $e');
+        // On ignore : l'utilisateur veut quitter, on ne bloque pas
+      }
+    }
+
+    // 3. Reset état
+    _searchingInterventionId = null;
     if (mounted) setState(() { _isSearching = false; });
   }
 
