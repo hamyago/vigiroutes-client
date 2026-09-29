@@ -67,7 +67,7 @@ class TransportTimeline extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          if (booking.providerStatus == null)
+          if (booking.transporterStatus == null)
             _buildNotAssigned()
           else
             _buildSteps(),
@@ -103,27 +103,27 @@ class TransportTimeline extends StatelessWidget {
     final steps = [
       _TimelineStep(
         label: 'Transporteur en route',
-        time: booking.providerEnRouteAt,
+        time: booking.transporterEnRouteAt,
         icon: Icons.directions_car_rounded,
       ),
       _TimelineStep(
         label: 'Véhicule récupéré',
-        time: booking.providerPickedUpAt,
+        time: booking.transporterPickedUpAt,
         icon: Icons.inventory_2_outlined,
       ),
       _TimelineStep(
         label: 'Arrivé au centre',
-        time: booking.providerDeliveredAt,
+        time: booking.transporterDeliveredAt,
         icon: Icons.business_rounded,
       ),
       _TimelineStep(
         label: 'Retour en cours',
-        time: booking.providerReturnStartedAt,
+        time: booking.transporterReturnStartedAt,
         icon: Icons.undo_rounded,
       ),
       _TimelineStep(
         label: 'Véhicule livré',
-        time: booking.providerReturnedAt,
+        time: booking.transporterReturnedAt,
         icon: Icons.check_circle_rounded,
       ),
     ];

@@ -382,13 +382,13 @@ class CtBookingModel {
   final DateTime createdAt;
 
   // ── Suivi transport (dépanneur / chauffeur) ─────────────────────────
-  final String? providerStatus;
-  final DateTime? providerEnRouteAt;
-  final DateTime? providerPickedUpAt;
-  final DateTime? providerDeliveredAt;
-  final DateTime? providerReturnStartedAt;
-  final DateTime? providerReturnedAt;
-  final DateTime? providerCompletedAt;
+  final String? transporterStatus;
+  final DateTime? transporterEnRouteAt;
+  final DateTime? transporterPickedUpAt;
+  final DateTime? transporterDeliveredAt;
+  final DateTime? transporterReturnStartedAt;
+  final DateTime? transporterReturnedAt;
+  final DateTime? transporterCompletedAt;
 
   const CtBookingModel({
     required this.id,
@@ -414,13 +414,13 @@ class CtBookingModel {
     this.nextVtDueDate,
     required this.createdAt,
     // Suivi transport
-    this.providerStatus,
-    this.providerEnRouteAt,
-    this.providerPickedUpAt,
-    this.providerDeliveredAt,
-    this.providerReturnStartedAt,
-    this.providerReturnedAt,
-    this.providerCompletedAt,
+    this.transporterStatus,
+    this.transporterEnRouteAt,
+    this.transporterPickedUpAt,
+    this.transporterDeliveredAt,
+    this.transporterReturnStartedAt,
+    this.transporterReturnedAt,
+    this.transporterCompletedAt,
   });
 
   bool get hasQr =>
@@ -444,11 +444,11 @@ class CtBookingModel {
       transportMode == 'tow' || transportMode == 'driver';
 
   /// Vrai si un transporteur a été assigné (donc mission active).
-  bool get hasAssignedTransporter => providerStatus != null;
+  bool get hasAssignedTransporter => transporterStatus != null;
 
   /// Label de l'étape courante.
   String get transportStepLabel {
-    switch (providerStatus) {
+    switch (transporterStatus) {
       case 'pending':
         return 'En préparation';
       case 'en_route_to_client':
@@ -468,12 +468,12 @@ class CtBookingModel {
 
   /// Position dans la timeline (0 à 5, -1 si pas commencé).
   int get transportStepIndex {
-    if (providerReturnedAt != null) return 5;
-    if (providerReturnStartedAt != null) return 4;
-    if (providerDeliveredAt != null) return 3;
-    if (providerPickedUpAt != null) return 2;
-    if (providerEnRouteAt != null) return 1;
-    if (providerStatus == 'pending') return 0;
+    if (transporterReturnedAt != null) return 5;
+    if (transporterReturnStartedAt != null) return 4;
+    if (transporterDeliveredAt != null) return 3;
+    if (transporterPickedUpAt != null) return 2;
+    if (transporterEnRouteAt != null) return 1;
+    if (transporterStatus == 'pending') return 0;
     return -1;
   }
 
@@ -553,13 +553,13 @@ class CtBookingModel {
       createdAt:           _dt(json['created_at']) ?? DateTime.now(),
 
       // ── Suivi transport ──
-      providerStatus:            json['provider_status'] as String?,
-      providerEnRouteAt:         _dt(json['provider_en_route_at']),
-      providerPickedUpAt:        _dt(json['provider_picked_up_at']),
-      providerDeliveredAt:       _dt(json['provider_delivered_at']),
-      providerReturnStartedAt:   _dt(json['provider_return_started_at']),
-      providerReturnedAt:        _dt(json['provider_returned_at']),
-      providerCompletedAt:       _dt(json['provider_completed_at']),
+      transporterStatus:            json['transporter_status'] as String?,
+      transporterEnRouteAt:         _dt(json['transporter_en_route_at']),
+      transporterPickedUpAt:        _dt(json['transporter_picked_up_at']),
+      transporterDeliveredAt:       _dt(json['transporter_delivered_at']),
+      transporterReturnStartedAt:   _dt(json['transporter_return_started_at']),
+      transporterReturnedAt:        _dt(json['transporter_returned_at']),
+      transporterCompletedAt:       _dt(json['transporter_completed_at']),
     );
   }
 }
