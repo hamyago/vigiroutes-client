@@ -48,6 +48,7 @@ class _RequestScreenState extends State<RequestScreen> {
   bool    _providerFound         = false;
   String? _foundInterventionId;
   bool    _cancelledByUser       = false;
+  String? _searchingMessage;
 
   StreamSubscription<RemoteMessage>? _fcmSubscription;
 
