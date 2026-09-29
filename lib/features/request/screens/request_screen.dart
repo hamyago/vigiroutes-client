@@ -86,6 +86,30 @@ class _RequestScreenState extends State<RequestScreen> {
       return;
     }
 
+    // ── FCM : prestataire a accepté (type envoyé par le backend) ──
+    if (type == 'order_accepted') {
+      _stopSearchLocally();
+      if (id != null && mounted) {
+        setState(() {
+          _providerFound       = true;
+          _foundInterventionId = id;
+        });
+      }
+      return;
+    }
+
+    // ── FCM : prestataire a refusé (recherche continue) ──
+    if (type == 'order_declined') {
+      // On reste en recherche — un autre prestataire va être notifié.
+      // On met à jour le message pour rassurer l'utilisateur.
+      if (mounted) {
+        setState(() {
+          _searchingMessage = 'Un prestataire a refusé. Recherche en cours...';
+        });
+      }
+      return;
+    }
+
     // ── FCM : mise à jour du statut ──
     if (type == 'intervention_update') {
       final status = message.data['status'] as String?;
@@ -825,23 +849,11 @@ class _ConfirmStepState extends State<_ConfirmStep> {
           // (contrôle technique), pas au flux dépannage.
           const SizedBox(height: 8),
 
-          // ── Détail des frais ─────────────────────────────────────────────
-          if (_tariffLoading)
-            const Center(child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: CircularProgressIndicator(),
-            ))
-          else ...[
-            _FraisCard(
-              tariff: _tariff,
-              transportMode: 'self',
-              baseEstimate: ctrl.estimate != null
-                  ? _estimateNum(ctrl.estimate!['base_price']) +
-                      _estimateNum(ctrl.estimate!['km_cost'])
-                  : null,
-            ),
-            const SizedBox(height: 16),
-          ],
+          // Frais détaillés supprimés : le dépannage affiche uniquement
+          // les infos du récapitulatif ci-dessus (frais partenaire + km).
+          // Les frais "option transport" (remorquage/chauffeur) sont
+          // réservés au flux CT.
+          const SizedBox(height: 8),
 
           // ── Mode de paiement ─────────────────────────────────────────────
           const Text('Mode de paiement',
@@ -917,90 +929,6 @@ class _ConfirmStepState extends State<_ConfirmStep> {
 
 
 
-class _FraisCard extends StatelessWidget {
-  final TariffModel? tariff;
-  final String transportMode;
-  /// Montant base + km issu de l'API estimate (si disponible)
-  final double? baseEstimate;
-
-  const _FraisCard({
-    required this.tariff,
-    required this.transportMode,
-    this.baseEstimate,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (tariff == null) {
-      // Pas de tarif configuré — on affiche juste l'estimate API si dispo
-      if (baseEstimate == null) return const SizedBox.shrink();
-      return _card([
-        _FraisRow(label: 'Frais partenaire', amount: baseEstimate!.toInt()),
-        _FraisRow(label: 'Frais option', amount: 0, note: 'selon mode'),
-        _FraisRow(label: 'Frais VigiRoutes', amount: 0, note: 'inclus'),
-        _FraisRow(
-          label: 'Total estimé',
-          amount: baseEstimate!.toInt(),
-          isTotal: true,
-        ),
-      ]);
-    }
-
-    final fraisOption = tariff!.fraisOptionPour(transportMode);
-    final optionLabel = switch (transportMode) {
-      'tow'    => 'Option Remorquage',
-      'driver' => 'Option Chauffeur affecté',
-      _        => 'Option Déplacement autonome',
-    };
-
-    // Frais partenaire : si on a l'estimate API, on l'utilise (plus précis),
-    // sinon on prend le tarif configuré.
-    final partnerAmt = baseEstimate != null
-        ? baseEstimate!.toInt()
-        : tariff!.fraisPartenaire;
-
-    final total = partnerAmt + fraisOption + tariff!.fraisVigiRoutes;
-
-    return _card([
-      _FraisRow(label: 'Frais partenaire', amount: partnerAmt),
-      _FraisRow(label: optionLabel, amount: fraisOption),
-      _FraisRow(label: 'Frais service VigiRoutes', amount: tariff!.fraisVigiRoutes),
-      const Divider(height: 16),
-      _FraisRow(label: 'Total à payer', amount: total, isTotal: true),
-    ]);
-  }
-
-  Widget _card(List<Widget> rows) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2))
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              const Icon(Icons.receipt_long_rounded,
-                  color: AppColors.primary, size: 18),
-              const SizedBox(width: 8),
-              const Text('Détail des frais',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: AppColors.textPrimary)),
-            ]),
-            const SizedBox(height: 12),
-            ...rows,
-          ],
-        ),
-      );
-}
 
 class _FraisRow extends StatelessWidget {
   final String label;
