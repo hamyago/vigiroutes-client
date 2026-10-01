@@ -179,7 +179,7 @@ class AuthController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('[Auth] refreshUser error: $e');
-      rethrow;
+      // Ne pas rethrow — une erreur réseau ne doit pas crasher l'appelant.
     }
   }
 
@@ -200,6 +200,18 @@ class AuthController extends ChangeNotifier {
       final data = await _api.getMe();
       _user  = UserModel.fromJson(data);
       _state = AuthState.authenticated;
+
+      // 🔧 FIX : Réinitialiser le WebSocket au démarrage avec un token existant.
+      try {
+        final token = await _api.getToken();
+        if (token != null && token.isNotEmpty) {
+          await RealtimeService.instance.init(token);
+          debugPrint('[Auth] RealtimeService.init au démarrage OK');
+        }
+      } catch (e) {
+        debugPrint('[Auth] RealtimeService.init au démarrage non-fatal: $e');
+      }
+
       notifyListeners();
     } catch (e) {
       debugPrint('[Auth] _refreshUser error: $e');

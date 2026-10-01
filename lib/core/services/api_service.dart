@@ -58,6 +58,10 @@ class ApiService {
     return prefs.containsKey('sanctum_token');
   }
 
+  /// Retourne le token Sanctum stocké, ou null s'il n'existe pas.
+  Future<String?> getToken() async =>
+      (await SharedPreferences.getInstance()).getString('sanctum_token');
+
   // ── HTTP ──────────────────────────────────────────────────────────────
   Future<Response> get(String path, {Map<String, dynamic>? params}) =>
       _dio.get(path, queryParameters: params);
