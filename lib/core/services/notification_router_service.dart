@@ -273,11 +273,19 @@ class NotificationRouterService {
     if (isCritical) bg = Colors.red.shade700;
     else if (isWarning) bg = Colors.orange.shade700;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+
+    // 🔧 FIX : nettoie les SnackBars empilés avant d'afficher le nouveau.
+    // Sans ça, les FCM en rafale créaient des "fantômes" qui traînaient
+    // 6 secondes chacun pendant la navigation entre écrans.
+    messenger.clearSnackBars();
+
+    messenger.showSnackBar(
       SnackBar(
         content: Text(text),
         backgroundColor: bg,
-        duration: const Duration(seconds: 6),
+        duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
         action: action,
       ),

@@ -129,10 +129,16 @@ class TerrainNotificationService {
   void _showSnackbar(String text, {SnackBarAction? action}) {
     final context = _navigatorKey?.currentContext;
     if (context == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+
+    // 🔧 FIX : nettoie les SnackBars empilés avant d'afficher le nouveau.
+    messenger.clearSnackBars();
+
+    messenger.showSnackBar(
       SnackBar(
         content: Text(text),
-        duration: const Duration(seconds: 5),
+        duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
         action: action,
       ),
