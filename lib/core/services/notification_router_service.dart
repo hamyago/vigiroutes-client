@@ -270,8 +270,11 @@ class NotificationRouterService {
     if (context == null) return;
 
     Color bg = Colors.grey.shade900;
-    if (isCritical) bg = Colors.red.shade700;
-    else if (isWarning) bg = Colors.orange.shade700;
+    if (isCritical) {
+      bg = Colors.red.shade700;
+    } else if (isWarning) {
+      bg = Colors.orange.shade700;
+    }
 
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return;
