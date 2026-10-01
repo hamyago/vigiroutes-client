@@ -195,8 +195,16 @@ class NotificationRouterService {
         type == 'vt_expired';
 
     try {
+      // ID unique par notification : sans ça, Android écrase la précédente
+      // (car type.hashCode est identique pour toutes les notifs du même type).
+      // On combine le type, l'intervention_id et le status pour garantir
+      // l'unicité → chaque mise à jour de statut apparaît séparément.
+      final interventionId = data['intervention_id'] ?? '';
+      final status = data['status'] ?? '';
+      final uniqueId = '$type-$interventionId-$status'.hashCode;
+
       await _localNotifications.show(
-        type.hashCode,
+        uniqueId,
         title,
         body,
         NotificationDetails(
