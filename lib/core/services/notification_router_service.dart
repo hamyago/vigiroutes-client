@@ -64,9 +64,11 @@ class NotificationRouterService {
     final type = message.data['type'] as String?;
     if (type == null) return;
 
-    final notification = message.notification;
-    final title = notification?.title ?? _titleForType(type);
-    final body  = notification?.body  ?? _bodyForData(message.data);
+    // FIX : le backend n'envoie plus 'notification' (data-only payload).
+    // On lit title/body depuis data. Fallback sur _titleForType/_bodyForData
+    // si le payload vient d'un canal legacy.
+    final title = (message.data['title'] as String?) ?? _titleForType(type);
+    final body  = (message.data['body']  as String?) ?? _bodyForData(message.data);
 
     _showLocalNotification(
       type: type, title: title, body: body, data: message.data,
@@ -325,10 +327,22 @@ class NotificationRouterService {
   // ─── Labels par type ────────────────────────────────────────────────────
 
   String _titleForType(String type) => switch (type) {
+        // ── Interventions (types spécifiques depuis le listener backend) ──
+        'order_accepted'          => '✅ Prestataire en route',
+        'order_started'           => '🔧 Intervention en cours',
+        'order_completed'         => '🎉 Intervention terminée',
+        'intervention_cancelled'  => '❌ Intervention annulée',
+        'dispatching'             => '🔍 Recherche en cours',
+        'no_provider_available'   => '😔 Aucun prestataire disponible',
+        'order_declined'          => '🔄 Recherche en cours',
+
+        // ── Legacy / générique ──
         'intervention_update' => '🚗 Mise à jour intervention',
         'no_provider'         => '😔 Aucun prestataire disponible',
         'emergency'           => '🚨 Urgence activée',
         'city_welcome'        => '👋 Bienvenue sur VigiRoutes',
+
+        // ── CT (contrôle technique) ──
         'booking_confirmed'   => '✅ Réservation CT confirmée',
         'vehicle_at_center'   => '🏁 Véhicule au centre CT',
         'vt_result'           => '📋 Résultat contrôle technique',
@@ -338,17 +352,47 @@ class NotificationRouterService {
         'vt_reminder_1d'      => '🚨 CT demain !',
         'vt_expired'          => '🚫 CT expiré',
         'ct_quote_received'   => '💰 Devis CT disponible',
+
+        // ── Crédit bas (app Pro) ──
+        'credit_low'          => '⚠️ Crédit VigiRoutes presque épuisé',
+        'credit_critical'     => '🔴 Crédit VigiRoutes épuisé',
+
+        // ── Fallback ──
         _                     => 'VigiRoutes',
       };
 
   String _bodyForData(Map<String, dynamic> data) {
     final immat = data['registration_number'] as String? ?? 'Votre véhicule';
+    final providerName = data['provider_name'] as String?;
+
     return switch (data['type'] as String? ?? '') {
+      // ── Interventions ──
+      'order_accepted'         => providerName != null
+          ? '$providerName a accepté votre demande et arrive.'
+          : 'Un prestataire a accepté votre demande et arrive.',
+      'order_started'          => providerName != null
+          ? 'Votre intervention est en cours avec $providerName.'
+          : 'Votre intervention est en cours.',
+      'order_completed'        => 'Votre intervention est terminée. Pensez à laisser un avis !',
+      'intervention_cancelled' => 'Votre demande a été annulée.',
+      'dispatching'            => 'Nous cherchons un prestataire disponible près de vous.',
+      'no_provider_available'  => "Aucun prestataire n'est disponible pour le moment.",
+      'order_declined'         => 'Un prestataire a refusé. Recherche en cours...',
+
+      // ── Legacy ──
+      'no_provider'     => "Aucun prestataire n'est disponible pour le moment.",
+
+      // ── CT ──
       'vt_reminder_7d'  => '$immat — contrôle technique dans 7 jours. Prenez rendez-vous.',
       'vt_reminder_3d'  => '$immat — contrôle technique dans 3 jours ! Prenez rendez-vous.',
       'vt_reminder_1d'  => '$immat — contrôle technique DEMAIN ! Réservez maintenant.',
       'vt_expired'      => '$immat — contrôle technique expiré. Régularisez rapidement.',
-      'no_provider'     => "Aucun prestataire n'est disponible pour le moment.",
+
+      // ── Crédit bas ──
+      'credit_low'      => 'Rechargez pour continuer à recevoir des demandes.',
+      'credit_critical' => 'Votre crédit est épuisé. Rechargez pour recevoir de nouvelles demandes.',
+
+      // ── Fallback ──
       _                 => 'Appuyez pour voir les détails.',
     };
   }
