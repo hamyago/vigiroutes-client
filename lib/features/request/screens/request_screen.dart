@@ -53,6 +53,7 @@ class _RequestScreenState extends State<RequestScreen> {
   StreamSubscription<RemoteMessage>? _fcmSubscription;
 
   void _startSearchTimeout(String interventionId) {
+    debugPrint('[TRACE-FCM] _startSearchTimeout called: $interventionId');
     _searchingInterventionId = interventionId;
     _searchTimeoutTimer?.cancel();
     // ⚡ Aligné avec le backend (cascade 10 prestataires × 30s = 5 min)
@@ -66,15 +67,27 @@ class _RequestScreenState extends State<RequestScreen> {
     _fcmSubscription?.cancel();
     _fcmSubscription =
         FirebaseMessaging.onMessage.listen(_onFcmDuringSearch);
+    debugPrint('[TRACE-FCM] FCM listener registered');
   }
 
   Future<void> _onFcmDuringSearch(RemoteMessage message) async {
-    if (!mounted || !_isSearching) return;
-    // Si l'utilisateur a déjà annulé volontairement, on ignore les FCM
-    if (_cancelledByUser) return;
+    // LOG TRACE
+    debugPrint('[TRACE-FCM] _onFcmDuringSearch called');
+    debugPrint('[TRACE-FCM] mounted=$mounted _isSearching=$_isSearching _cancelledByUser=$_cancelledByUser');
+    debugPrint('[TRACE-FCM] data=${message.data}');
+
+    if (!mounted || !_isSearching) {
+      debugPrint('[TRACE-FCM] SKIP (not searching or unmounted)');
+      return;
+    }
+    if (_cancelledByUser) {
+      debugPrint('[TRACE-FCM] SKIP (cancelled)');
+      return;
+    }
 
     final type = message.data['type'] as String?;
     final id   = message.data['intervention_id'] as String?;
+    debugPrint('[TRACE-FCM] type=$type id=$id _searchingInterventionId=$_searchingInterventionId');
 
     final isOurIntervention =
         id == null || id == _searchingInterventionId;
