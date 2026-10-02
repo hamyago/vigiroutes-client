@@ -93,8 +93,19 @@ class _RequestScreenState extends State<RequestScreen> {
         id == null || id == _searchingInterventionId;
     if (!isOurIntervention) return;
 
+    // ── FCM : dispatching (état transitoire, on ignore) ──
+    // Le backend envoie 'dispatching' quand il contacte un pro. Ce n'est
+    // PAS un échec — on doit continuer la recherche et attendre
+    // 'order_accepted' (succès) ou 'no_provider_available' (échec réel).
+    if (type == 'dispatching') {
+      debugPrint('[TRACE-FCM] SKIP dispatching (transient)');
+      return;
+    }
+
     // ── FCM : aucun prestataire dispo ──
-    if (type == 'no_provider') {
+    // NOTE : le backend envoie 'no_provider_available' (avec suffixe), mais
+    // certaines versions anciennes envoyaient 'no_provider'. On accepte les 2.
+    if (type == 'no_provider' || type == 'no_provider_available') {
       _stopSearchLocally();
       if (mounted) _showNoProviderDialog();
       return;
