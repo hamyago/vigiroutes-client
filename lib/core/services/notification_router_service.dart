@@ -61,6 +61,16 @@ class NotificationRouterService {
   // ─── Foreground ─────────────────────────────────────────────────────────
 
   void _handleForeground(RemoteMessage message) {
+    // ─── DEBUG LOGS ──────────────────────────────────────────────
+    // Pour diagnostiquer : adb logcat | grep FCM-CT
+    debugPrint('[FCM-CT] RAW '
+        'type=${message.data['type']} '
+        'title=${message.data['title']} '
+        'body=${message.data['body']} '
+        'status=${message.data['status']} '
+        'booking_id=${message.data['booking_id']}');
+    // ─────────────────────────────────────────────────────────────
+
     final type = message.data['type'] as String?;
     if (type == null) return;
 
@@ -120,6 +130,7 @@ class NotificationRouterService {
 
       case 'booking_confirmed':
       case 'vehicle_at_center':
+      case 'inspection_ongoing':
       case 'vt_result':
       case 'transport_update':
         _showSnackbar(body,
@@ -171,6 +182,7 @@ class NotificationRouterService {
 
       case 'booking_confirmed':
       case 'vehicle_at_center':
+      case 'inspection_ongoing':
       case 'vt_result':
       case 'transport_update':
         _navigateToCT(message.data);
@@ -345,6 +357,7 @@ class NotificationRouterService {
         // ── CT (contrôle technique) ──
         'booking_confirmed'   => '✅ Réservation CT confirmée',
         'vehicle_at_center'   => '🏁 Véhicule au centre CT',
+        'inspection_ongoing'  => '🔧 Contrôle en cours',
         'vt_result'           => '📋 Résultat contrôle technique',
         'transport_update'    => '🚗 Mise à jour transport CT',
         'vt_reminder_7d'      => '⚠️ CT dans 7 jours',
@@ -383,6 +396,7 @@ class NotificationRouterService {
       'no_provider'     => "Aucun prestataire n'est disponible pour le moment.",
 
       // ── CT ──
+      'inspection_ongoing' => 'Le contrôle technique de votre véhicule a démarré.',
       'vt_reminder_7d'  => '$immat — contrôle technique dans 7 jours. Prenez rendez-vous.',
       'vt_reminder_3d'  => '$immat — contrôle technique dans 3 jours ! Prenez rendez-vous.',
       'vt_reminder_1d'  => '$immat — contrôle technique DEMAIN ! Réservez maintenant.',
