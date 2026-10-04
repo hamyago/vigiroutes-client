@@ -252,9 +252,12 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
         // dans les 24h qui suivent. Après, il est masqué (contrôle effectué).
         if (b.qrToken != null) ...[
           Builder(builder: (context) {
-            final hoursSince = DateTime.now().difference(b.slotStartsAt).inHours;
-            final isQrStillValid = hoursSince < 24;
-            final isQrExpired = !isQrStillValid;
+            // ✅ Aligné sur la logique backend : on utilise qrExpiresAt
+            // au lieu de slotStartsAt + 24h. Évite la fenêtre de 12h
+            // pendant laquelle le backend refuse le QR mais l'app
+            // l'affiche encore.
+            final isQrExpired = b.qrExpiresAt == null
+                || b.qrExpiresAt!.isBefore(DateTime.now());
 
             if (isQrExpired) {
               return _Section(title: 'QR Code d\'entrée', children: [
