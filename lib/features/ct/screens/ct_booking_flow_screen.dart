@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../controllers/ct_booking_controller.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/ct_quote_model.dart';
+import '../../../core/services/location_service.dart';
 
 class CtBookingFlowScreen extends StatefulWidget {
   /// bookingHint optionnel : passé via extra quand on arrive depuis l'acceptation d'un devis CT.
@@ -554,6 +555,15 @@ class _Step3TransportMode extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ],
+
+        // ── Adresse de prise en charge (si transport != self) ────────
+        if (ctrl.transportMode != 'self') ...[
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _PickupAddressField(ctrl: ctrl),
           ),
         ],
         const Spacer(),
@@ -1403,6 +1413,159 @@ class _StepIndicator extends StatelessWidget {
           }),
         ),
       ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Widget : Adresse de prise en charge (avec bouton GPS)
+// -----------------------------------------------------------------------------
+class _PickupAddressField extends StatefulWidget {
+  final CtBookingController ctrl;
+  const _PickupAddressField({required this.ctrl});
+
+  @override
+  State<_PickupAddressField> createState() => _PickupAddressFieldState();
+}
+
+class _PickupAddressFieldState extends State<_PickupAddressField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.ctrl.pickupAddress);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _locate() async {
+    widget.ctrl.setLocatingAddress(true);
+    try {
+      final loc = await LocationService().getCurrentPosition();
+      if (loc == null) {
+        if (!mounted) return;
+        _showError("Impossible d'obtenir votre position. Vérifiez le GPS.");
+        return;
+      }
+
+      final address = await LocationService()
+          .getAddressFromCoords(loc.latitude, loc.longitude);
+
+      widget.ctrl.setPickupCoords(loc.latitude, loc.longitude);
+      final displayAddress = address ??
+          '${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)}';
+
+      _controller.text = displayAddress;
+      widget.ctrl.setPickupAddress(displayAddress);
+    } finally {
+      widget.ctrl.setLocatingAddress(false);
+    }
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.location_on_rounded, color: AppColors.primary, size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Adresse de prise en charge',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const Spacer(),
+            if (widget.ctrl.pickupAddress.isNotEmpty)
+              const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 18),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Indiquez où le transporteur doit récupérer votre véhicule.',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 12,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: TextField(
+            controller: _controller,
+            maxLines: 2,
+            minLines: 1,
+            style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+            decoration: const InputDecoration(
+              hintText: 'Ex: Cocody Angré, 7ème tranche...',
+              hintStyle: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                color: AppColors.textMuted,
+              ),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.all(14),
+            ),
+            onChanged: (v) => widget.ctrl.setPickupAddress(v.trim()),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: OutlinedButton.icon(
+            onPressed: widget.ctrl.locatingAddress ? null : _locate,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            icon: widget.ctrl.locatingAddress
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : const Icon(Icons.my_location_rounded, size: 18),
+            label: Text(
+              widget.ctrl.locatingAddress
+                  ? 'Localisation en cours...'
+                  : 'Utiliser ma position actuelle',
+              style: const TextStyle(
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

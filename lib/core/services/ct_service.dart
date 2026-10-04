@@ -162,12 +162,22 @@ class CtService {
     required String sessionId,
     String? transportOption,
     String? quoteId,
+    String? pickupAddress,
+    double? pickupLat,
+    double? pickupLng,
+    String? returnAddress,
   }) async {
     final res = await _api.post('/ct/bookings', data: {
       'vehicle_id': vehicleId,
       'session_id': sessionId,
       if (transportOption != null) 'transport_mode': transportOption,
       if (quoteId != null) 'quote_id': quoteId,
+      if (pickupAddress != null && pickupAddress.isNotEmpty)
+        'pickup_address': pickupAddress,
+      if (pickupLat != null) 'pickup_lat': pickupLat,
+      if (pickupLng != null) 'pickup_lng': pickupLng,
+      if (returnAddress != null && returnAddress.isNotEmpty)
+        'return_address': returnAddress,
     });
     final obj = _extractObject(res.data, key: 'data');
     return CtBookingModel.fromJson(obj);

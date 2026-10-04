@@ -256,6 +256,19 @@ class CtBookingController extends ChangeNotifier {
   String _transportMode = 'self';
   String get transportMode => _transportMode;
 
+  // ── Adresse de prise en charge (transport) ─────────────────────────────
+  String _pickupAddress = '';
+  String get pickupAddress => _pickupAddress;
+
+  double? _pickupLat;
+  double? get pickupLat => _pickupLat;
+
+  double? _pickupLng;
+  double? get pickupLng => _pickupLng;
+
+  bool _locatingAddress = false;
+  bool get locatingAddress => _locatingAddress;
+
   /// Si on vient d'un devis, le transport est imposé — non modifiable.
   bool get transportLocked => fromHint;
 
@@ -275,6 +288,29 @@ class CtBookingController extends ChangeNotifier {
     if (_keyHandoverAccepted == v) return;
     _keyHandoverAccepted = v;
     notifyListeners();
+  }
+
+  /// Met à jour l'adresse de prise en charge (appelée par le widget).
+  void setPickupAddress(String address) {
+    _pickupAddress = address;
+    if (!_disposed) notifyListeners();
+  }
+
+  void setPickupCoords(double lat, double lng) {
+    _pickupLat = lat;
+    _pickupLng = lng;
+    if (!_disposed) notifyListeners();
+  }
+
+  void setLocatingAddress(bool value) {
+    _locatingAddress = value;
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Valide que l'adresse est fournie si transport != self
+  bool get isPickupAddressValid {
+    if (_transportMode == 'self') return true;
+    return _pickupAddress.trim().isNotEmpty;
   }
 
   bool get canProceedStep3 =>
@@ -524,6 +560,13 @@ class CtBookingController extends ChangeNotifier {
       return false;
     }
 
+    // Validation : adresse requise pour tout sauf 'self'
+    if (!isPickupAddressValid) {
+      _error = 'Adresse de prise en charge requise pour le transport.';
+      if (!_disposed) notifyListeners();
+      return false;
+    }
+
     _isLoading = true;
     _error = null;
     if (!_disposed) notifyListeners();
@@ -534,6 +577,10 @@ class CtBookingController extends ChangeNotifier {
         sessionId: _selectedSlot!.sessionId,
         transportOption: _transportMode,
         quoteId: _bookingHint?.quoteId,
+        pickupAddress: _pickupAddress.isNotEmpty ? _pickupAddress : null,
+        pickupLat: _pickupLat,
+        pickupLng: _pickupLng,
+        returnAddress: _pickupAddress.isNotEmpty ? _pickupAddress : null,
       );
       _startCountdown();
       return true;
