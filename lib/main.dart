@@ -47,17 +47,37 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final type = data['type'] as String?;
 
   const handledTypes = {
+    // ── Interventions (dépannage, remorquage) ──
+    'order_accepted',
+    'order_started',
+    'order_completed',
+    'intervention_cancelled',
+    'dispatching',
+    'no_provider_available',
+    'order_declined',
     'intervention_update',
     'no_provider',
+    // ── Urgence ──
     'emergency',
+    // ── CT ──
     'booking_confirmed',
     'vehicle_at_center',
+    'inspection_ongoing',
     'vt_result',
     'transport_update',
     'vt_reminder_30d',
     'vt_reminder_15d',
     'vt_reminder_7d',
+    'vt_reminder_3d',
+    'vt_reminder_1d',
     'vt_expired',
+    // ── Devis CT ──
+    'ct_quote_received',
+    // ── Crédit (app Pro) ──
+    'credit_low',
+    'credit_critical',
+    // ── City welcome ──
+    'city_welcome',
   };
   if (type == null || !handledTypes.contains(type)) return;
 
@@ -99,26 +119,93 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 String _titleForType(String type) => switch (type) {
-      'intervention_update' => '🚗 Mise à jour intervention',
-      'no_provider'         => '😔 Aucun prestataire disponible',
-      'emergency'           => '🚨 Urgence activée',
-      'booking_confirmed'   => '✅ Réservation CT confirmée',
-      'vehicle_at_center'   => '🏁 Véhicule au centre CT',
-      'vt_result'           => '📋 Résultat contrôle technique',
-      'transport_update'    => '🚗 Mise à jour transport CT',
-      'vt_reminder_30d'     => '📅 CT dans 30 jours',
-      'vt_reminder_15d'     => '📅 CT dans 15 jours',
-      'vt_reminder_7d'      => '⚠️ CT dans 7 jours',
-      'vt_expired'          => '🚫 CT expiré',
-      _                     => 'VigiRoutes',
+      // ── Interventions ──
+      'order_accepted'         => '✅ Prestataire en route',
+      'order_started'          => '🔧 Intervention en cours',
+      'order_completed'        => '🎉 Intervention terminée',
+      'intervention_cancelled' => '❌ Intervention annulée',
+      'dispatching'            => '🔍 Recherche en cours',
+      'no_provider_available'  => '😔 Aucun prestataire disponible',
+      'order_declined'         => '🔄 Recherche en cours',
+      'intervention_update'    => '🚗 Mise à jour intervention',
+      'no_provider'            => '😔 Aucun prestataire disponible',
+      // ── Urgence ──
+      'emergency'              => '🚨 Urgence activée',
+      // ── CT ──
+      'booking_confirmed'      => '✅ Réservation CT confirmée',
+      'vehicle_at_center'      => '🏁 Véhicule au centre CT',
+      'inspection_ongoing'     => '🔧 Contrôle en cours',
+      'vt_result'              => '📋 Résultat contrôle technique',
+      'transport_update'       => '🚗 Mise à jour transport CT',
+      'vt_reminder_30d'        => '📅 CT dans 30 jours',
+      'vt_reminder_15d'        => '📅 CT dans 15 jours',
+      'vt_reminder_7d'         => '⚠️ CT dans 7 jours',
+      'vt_reminder_3d'         => '🔔 CT dans 3 jours',
+      'vt_reminder_1d'         => '🚨 CT demain !',
+      'vt_expired'             => '🚫 CT expiré',
+      // ── Devis CT ──
+      'ct_quote_received'      => '💰 Devis CT disponible',
+      // ── Crédit ──
+      'credit_low'             => '⚠️ Crédit presque épuisé',
+      'credit_critical'        => '🔴 Crédit épuisé',
+      // ── City welcome ──
+      'city_welcome'           => '👋 Bienvenue sur VigiRoutes',
+      // ── Fallback ──
+      _                        => 'VigiRoutes',
     };
 
 String _bodyForData(Map<String, dynamic> data) {
   final type = data['type'] as String? ?? '';
+  final immat = data['registration_number'] as String? ?? 'Votre véhicule';
+  final providerName = data['provider_name'] as String?;
+  final amount = data['amount'] as String?;
+
   return switch (type) {
-    'no_provider' => "Aucun prestataire n'est disponible pour le moment.",
-    'vt_expired'  => 'Votre contrôle technique est expiré. Prenez rendez-vous.',
-    _             => 'Appuyez pour voir les détails.',
+    // ── Interventions ──
+    'order_accepted'         => providerName != null
+        ? '$providerName a accepté votre demande et arrive.'
+        : 'Un prestataire a accepté votre demande et arrive.',
+    'order_started'          => providerName != null
+        ? 'Votre intervention est en cours avec $providerName.'
+        : 'Votre intervention est en cours.',
+    'order_completed'        => 'Votre intervention est terminée. Pensez à laisser un avis !',
+    'intervention_cancelled' => 'Votre demande a été annulée.',
+    'dispatching'            => 'Nous cherchons un prestataire disponible près de vous.',
+    'no_provider_available'  => "Aucun prestataire n'est disponible pour le moment.",
+    'order_declined'         => 'Un prestataire a refusé. Recherche en cours...',
+    'intervention_update'    => 'Une mise à jour de votre intervention est disponible.',
+    'no_provider'            => "Aucun prestataire n'est disponible pour le moment.",
+
+    // ── Urgence ──
+    'emergency'              => 'Votre demande d'urgence a été enregistrée.',
+
+    // ── CT ──
+    'booking_confirmed'      => 'Votre réservation CT est confirmée. Votre QR code est disponible.',
+    'vehicle_at_center'      => 'Votre véhicule est arrivé au centre. Le contrôle va commencer.',
+    'inspection_ongoing'     => 'Le contrôle technique de votre véhicule a démarré.',
+    'vt_result'              => 'Le résultat de votre contrôle technique est disponible.',
+    'transport_update'       => 'Une mise à jour du transport de votre véhicule est disponible.',
+    'vt_reminder_30d'        => '$immat — contrôle technique dans 30 jours.',
+    'vt_reminder_15d'        => '$immat — contrôle technique dans 15 jours.',
+    'vt_reminder_7d'         => '$immat — contrôle technique dans 7 jours. Prenez rendez-vous.',
+    'vt_reminder_3d'         => '$immat — contrôle technique dans 3 jours ! Prenez rendez-vous.',
+    'vt_reminder_1d'         => '$immat — contrôle technique DEMAIN ! Réservez maintenant.',
+    'vt_expired'             => '$immat — contrôle technique expiré. Régularisez rapidement.',
+
+    // ── Devis CT ──
+    'ct_quote_received'      => amount != null
+        ? 'Votre devis de $amount FCFA est prêt. Consultez-le et acceptez ou refusez dans l'app.'
+        : 'Votre devis CT est disponible. Consultez-le dans l'app.',
+
+    // ── Crédit ──
+    'credit_low'             => 'Rechargez pour continuer à recevoir des demandes.',
+    'credit_critical'        => 'Votre crédit est épuisé. Rechargez pour recevoir de nouvelles demandes.',
+
+    // ── City welcome ──
+    'city_welcome'           => 'Bienvenue sur VigiRoutes !',
+
+    // ── Fallback ──
+    _                        => 'Appuyez pour voir les détails.',
   };
 }
 
