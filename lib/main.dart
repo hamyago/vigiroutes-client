@@ -177,7 +177,7 @@ String _bodyForData(Map<String, dynamic> data) {
     'no_provider'            => "Aucun prestataire n'est disponible pour le moment.",
 
     // ── Urgence ──
-    'emergency'              => 'Votre demande d'urgence a été enregistrée.',
+    'emergency'              => "Votre demande d'urgence a été enregistrée.",
 
     // ── CT ──
     'booking_confirmed'      => 'Votre réservation CT est confirmée. Votre QR code est disponible.',
@@ -194,8 +194,8 @@ String _bodyForData(Map<String, dynamic> data) {
 
     // ── Devis CT ──
     'ct_quote_received'      => amount != null
-        ? 'Votre devis de $amount FCFA est prêt. Consultez-le et acceptez ou refusez dans l'app.'
-        : 'Votre devis CT est disponible. Consultez-le dans l'app.',
+        ? "Votre devis de $amount FCFA est prêt. Consultez-le et acceptez ou refusez dans l'app."
+        : "Votre devis CT est disponible. Consultez-le dans l'app.",
 
     // ── Crédit ──
     'credit_low'             => 'Rechargez pour continuer à recevoir des demandes.',
