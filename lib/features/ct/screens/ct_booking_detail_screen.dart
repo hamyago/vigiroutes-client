@@ -18,6 +18,7 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
   bool _loading = true;
   String? _error;
   bool _cancelling = false;
+  bool _isRegeneratingQr = false;
 
   @override
   void initState() {
@@ -32,6 +33,58 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
       setState(() { _booking = b; _loading = false; });
     } catch (e) {
       setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  /// Regénère le QR code du booking et rafraîchit l'écran.
+  Future<void> _onRegenerateQr() async {
+    if (_isRegeneratingQr) return;
+    setState(() => _isRegeneratingQr = true);
+
+    try {
+      // 1. Appel API : regénère le token
+      await CtService.instance.regenerateQr(widget.bookingId);
+
+      // 2. Recharge le booking pour avoir le nouveau qr_token + qr_expires_at
+      final fresh = await CtService.instance.getBooking(widget.bookingId);
+
+      if (!mounted) return;
+      setState(() {
+        _booking = fresh;
+        _isRegeneratingQr = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ QR code regénéré avec succès'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isRegeneratingQr = false);
+
+      // Message backend prioritaire
+      String message = 'Erreur lors de la régénération';
+      final errStr = e.toString();
+      if (errStr.contains('429')) {
+        message = 'Limite de regénérations atteinte. Contactez le centre.';
+      } else if (errStr.contains('409')) {
+        message = 'Impossible de regénérer : cette réservation est terminée.';
+      } else if (errStr.contains('422')) {
+        message = 'Paiement requis avant de générer le QR.';
+      } else if (errStr.contains('404')) {
+        message = 'Réservation introuvable.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 
@@ -208,40 +261,80 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: AppColors.textMuted.withValues(alpha: 0.08),
+                    color: Colors.orange.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: AppColors.textMuted.withValues(alpha: 0.25),
+                      color: Colors.orange.withValues(alpha: 0.35),
                     ),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.check_circle_outline_rounded,
-                          color: AppColors.textMuted, size: 22),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Contrôle effectué',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                                color: AppColors.textPrimary,
-                              ),
+                      Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded,
+                              color: Colors.orange, size: 22),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'QR code expiré',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Votre QR code n\'est plus valide. Regénérez-en un nouveau pour vous présenter au centre.',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Le QR code n\'est plus disponible 24h après le rendez-vous.',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isRegeneratingQr ? null : _onRegenerateQr,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ],
+                          ),
+                          icon: _isRegeneratingQr
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh, size: 18),
+                          label: Text(
+                            _isRegeneratingQr
+                                ? 'Regénération…'
+                                : 'Régénérer mon QR code',
+                            style: const TextStyle(
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
                       ),
                     ],

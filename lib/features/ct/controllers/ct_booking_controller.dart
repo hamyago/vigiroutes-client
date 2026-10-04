@@ -585,6 +585,52 @@ class CtBookingController extends ChangeNotifier {
     }
   }
 
+  // ── Regenerate QR ────────────────────────────────────────────────────────
+
+  /// Regénère le QR code d'une réservation expirée.
+  ///
+  /// Après succès, on **recharge** le booking depuis l'API pour garantir
+  /// que `qrToken` et `qrExpiresAt` sont bien à jour (source de vérité serveur).
+  ///
+  /// Retourne `true` si succès, `false` sinon (avec `_error` rempli).
+  Future<bool> regenerateQr() async {
+    if (_activeBooking == null) return false;
+
+    _isLoading = true;
+    _error = null;
+    if (!_disposed) notifyListeners();
+
+    try {
+      final result = await CtService.instance.regenerateQr(_activeBooking!.id);
+
+      final newToken = result['qr_token'] as String?;
+      if (newToken == null || newToken.isEmpty) {
+        _error = 'Token QR manquant dans la réponse serveur';
+        return false;
+      }
+
+      // Met à jour directement le token en mémoire (rapide, sans reload)
+      _qrToken = newToken;
+
+      // Puis recharge le booking complet pour rafraîchir qrExpiresAt
+      // et tous les autres champs serveur.
+      try {
+        final freshBooking = await CtService.instance.getBooking(_activeBooking!.id);
+        _activeBooking = freshBooking;
+      } catch (_) {
+        // Si le reload échoue, on garde au moins le token à jour.
+      }
+
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
   // ── Reset ────────────────────────────────────────────────────────────────
 
   void reset() {

@@ -221,4 +221,13 @@ class CtService {
   /// URL de l'image QR code pour un booking confirmé (bearer auth via header).
   String qrCodeUrl(String bookingId) =>
       '$_base/ct/bookings/$bookingId/qr';
+
+  /// POST /ct/bookings/{id}/regenerate-qr
+  ///
+  /// Regénère le QR token d'une réservation expirée.
+  /// Retourne {qr_token, qr_expires_at, qr_regeneration_count, qr_regeneration_left}.
+  Future<Map<String, dynamic>> regenerateQr(String bookingId) async {
+    final res = await _api.post('/ct/bookings/$bookingId/regenerate-qr');
+    return _extractObject(res.data, key: 'data');
+  }
 }
