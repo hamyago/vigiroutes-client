@@ -90,8 +90,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   );
 
   final notification = message.notification;
-  final title = notification?.title ?? _titleForType(type);
-  final body  = notification?.body  ?? _bodyForData(data);
+  // FIX Session 13.5 : lire data['title']/data['body'] EN PREMIER
+  // car le backend envoie en data-only (pas de bloc 'notification')
+  final title = (data['title'] as String?) ??
+      notification?.title ??
+      _titleForType(type);
+  final body = (data['body'] as String?) ??
+      notification?.body ??
+      _bodyForData(data);
 
   await plugin.show(
     type.hashCode,
