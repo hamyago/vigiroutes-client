@@ -376,7 +376,7 @@ class _ExpiryBadge extends StatelessWidget {
   });
 
   int? get _daysLeft =>
-      date == null ? null : date!.difference(DateTime.now()).inDays;
+      date?.difference(DateTime.now()).inDays;
 
   Color get _color {
     final d = _daysLeft;
@@ -651,7 +651,7 @@ class _VehicleSheetState extends State<_VehicleSheet> {
     IconData? icon,
   }) {
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       decoration: _dec(label, icon: icon),
       hint: Text('Sélectionner'),
       isExpanded: true,
