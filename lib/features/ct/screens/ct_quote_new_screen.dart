@@ -31,6 +31,7 @@ class _CtQuoteNewScreenState extends State<CtQuoteNewScreen> {
   List<Map<String, dynamic>> _providers = [];
   bool _loadingProviders = true;
   String? _selectedProviderId;
+  // ignore: unused_field
   String? _selectedProviderName;
 
   // ── Autres champs ────────────────────────────────────────────────────────────

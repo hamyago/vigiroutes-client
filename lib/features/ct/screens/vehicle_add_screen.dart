@@ -185,9 +185,9 @@ class _VehicleAddScreenState extends State<VehicleAddScreen> {
       margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -441,7 +441,7 @@ class _VehicleAddScreenState extends State<VehicleAddScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2196F3).withOpacity(0.06),
+                  color: const Color(0xFF2196F3).withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Row(
@@ -578,7 +578,7 @@ class _VehicleAddScreenState extends State<VehicleAddScreen> {
     String? Function(T?)? validator,
   }) {
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       onChanged: onChanged,
       validator: validator,
       decoration: InputDecoration(

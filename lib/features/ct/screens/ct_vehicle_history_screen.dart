@@ -101,7 +101,7 @@ class _CtVehicleHistoryScreenState extends State<CtVehicleHistoryScreen> {
                     color: AppColors.surface,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: DropdownButtonFormField<VehicleModel>(
-                      value: _selected,
+                      initialValue: _selected,
                       decoration: InputDecoration(
                         labelText: 'Véhicule',
                         labelStyle: const TextStyle(color: AppColors.textSecondary),

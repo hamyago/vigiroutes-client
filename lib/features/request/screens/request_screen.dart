@@ -10,10 +10,8 @@ import '../../auth/controllers/auth_controller.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/models.dart';
 import '../../../core/models/service_type_model.dart';
-import '../../../core/models/tariff_model.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/service_type_service.dart';
-import '../../../core/utils/price_calculator.dart';
 import '../../../shared/widgets/custom_button.dart';
 
 double _estimateNum(dynamic v) {
@@ -48,7 +46,6 @@ class _RequestScreenState extends State<RequestScreen> {
   bool    _providerFound         = false;
   String? _foundInterventionId;
   bool    _cancelledByUser       = false;
-  String? _searchingMessage;
 
   StreamSubscription<RemoteMessage>? _fcmSubscription;
 
@@ -118,11 +115,7 @@ class _RequestScreenState extends State<RequestScreen> {
     if (type == 'order_declined') {
       // On reste en recherche — un autre prestataire va être notifié.
       // On met à jour le message pour rassurer l'utilisateur.
-      if (mounted) {
-        setState(() {
-          _searchingMessage = 'Un prestataire a refusé. Recherche en cours...';
-        });
-      }
+      // TODO S17: message "prestataire a refusé" — à réintégrer avec un autre mécanisme
       return;
     }
 
@@ -774,38 +767,12 @@ class _ConfirmStep extends StatefulWidget {
 
 class _ConfirmStepState extends State<_ConfirmStep> {
 
-  // Tarif chargé depuis l'API
-  TariffModel? _tariff;
-  bool _tariffLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadTariff();
   }
 
-  Future<void> _loadTariff() async {
-    try {
-      final slug = widget.ctrl.selectedService?.slug;
-      final raw = await ApiService.instance.getTariffs();
-      // Cherche d'abord le tarif correspondant au service, sinon prend le global
-      final list = raw.map((e) => TariffModel.fromJson(e as Map<String, dynamic>)).toList();
-      TariffModel? found;
-      if (slug != null) {
-        found = list.cast<TariffModel?>().firstWhere(
-          (t) => t?.serviceTypeSlug == slug && (t?.isActive ?? false),
-          orElse: () => null,
-        );
-      }
-      found ??= list.cast<TariffModel?>().firstWhere(
-        (t) => t?.serviceTypeSlug == null && (t?.isActive ?? false),
-        orElse: () => null,
-      );
-      if (mounted) setState(() { _tariff = found; _tariffLoading = false; });
-    } catch (_) {
-      if (mounted) setState(() => _tariffLoading = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -946,54 +913,9 @@ class _ConfirmStepState extends State<_ConfirmStep> {
 
 
 
-class _FraisRow extends StatelessWidget {
-  final String label;
-  final int amount;
-  final bool isTotal;
-  final String? note;
-  const _FraisRow({
-    required this.label,
-    required this.amount,
-    this.isTotal = false,
-    this.note,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final amtStr = note != null
-        ? note!
-        : '${amount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]} ')} FCFA';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(children: [
-        Expanded(
-          child: Text(label,
-              style: TextStyle(
-                  fontSize: isTotal ? 14 : 13,
-                  fontWeight:
-                      isTotal ? FontWeight.w700 : FontWeight.normal,
-                  color: isTotal
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary)),
-        ),
-        Text(amtStr,
-            style: TextStyle(
-                fontSize: isTotal ? 16 : 13,
-                fontWeight:
-                    isTotal ? FontWeight.w700 : FontWeight.w500,
-                color: isTotal ? AppColors.primary : AppColors.textPrimary)),
-      ]),
-    );
-  }
-}
-
 class _Row extends StatelessWidget {
   final String label, value;
-  final bool bold;
-  final Color? valueColor;
-  const _Row(this.label, this.value,
-      {this.bold = false, this.valueColor});
+  const _Row(this.label, this.value);
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1004,11 +926,10 @@ class _Row extends StatelessWidget {
                   color: AppColors.textSecondary)),
           const Spacer(),
           Text(value,
-              style: TextStyle(
-                fontWeight:
-                    bold ? FontWeight.w700 : FontWeight.w500,
-                color: valueColor ?? AppColors.textPrimary,
-                fontSize: bold ? 16 : 14,
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+                fontSize: 14,
               )),
         ]),
       );
@@ -1032,8 +953,10 @@ class _PaymentMethods extends StatelessWidget {
           .map<Widget>((m) => ListTile(
                 leading: Radio<String>(
                   value: m.$1,
+                  // ignore: deprecated_member_use
                   groupValue: selected,
                   activeColor: AppColors.primary,
+                  // ignore: deprecated_member_use
                   onChanged: (v) {
                     if (v != null) onSelect(v);
                   },
