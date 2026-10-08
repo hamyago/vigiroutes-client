@@ -167,6 +167,8 @@ class AssignedAssistant {
 class InterventionModel {
   final String id;
   final String userId;
+  final String? vehicleId;            // S15 : véhicule concerné (optionnel)
+  final VehicleModel? vehicle;        // S15 : relation chargée
   final String? providerId;
   final String serviceTypeId;
   final String serviceTypeName;
@@ -193,6 +195,8 @@ class InterventionModel {
   const InterventionModel({
     required this.id,
     required this.userId,
+    this.vehicleId,
+    this.vehicle,
     this.providerId,
     required this.serviceTypeId,
     required this.serviceTypeName,
@@ -231,9 +235,13 @@ class InterventionModel {
 
   factory InterventionModel.fromJson(Map<String, dynamic> json) {
     final providerJson = json['provider'] as Map<String, dynamic>?;
+    final vehicleJson  = json['vehicle'] as Map<String, dynamic>?;
     return InterventionModel(
       id:               json['id'] as String,
       userId:           json['user_id'] as String,
+      vehicleId:        json['vehicle_id'] as String?,
+      vehicle:          vehicleJson != null
+                            ? VehicleModel.fromJson(vehicleJson) : null,
       providerId:       json['provider_id'] as String?,
       serviceTypeId:    json['service_type_id'] as String? ?? '',
       serviceTypeName:  json['service_type_name'] as String? ?? '',

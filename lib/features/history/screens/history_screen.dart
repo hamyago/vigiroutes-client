@@ -19,18 +19,103 @@ class _HistoryScreenState extends State<HistoryScreen> {
   /// Filtre période sélectionné (S14).
   DateFilter _selectedFilter = DateFilter.all;
 
-  /// Filtre une liste d'interventions par période.
-  List<InterventionModel> _filterByDate(List<InterventionModel> items) {
-    return items
-        .where((i) => matchesDateFilter(i.createdAt, _selectedFilter))
-        .toList();
+  /// Filtre véhicule sélectionné (S15). null = tous les véhicules.
+  String? _selectedVehicleId;
+
+  /// Liste des véhicules de l'utilisateur (pour le filtre).
+  List<VehicleModel> _vehicles = [];
+
+  /// Liste complète des interventions (avant filtre période).
+  List<InterventionModel> _interventions = [];
+
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAll();
   }
+
+  /// Charge les véhicules + interventions en parallèle.
+  Future<void> _loadAll() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      // Charger véhicules et interventions en parallèle
+      final results = await Future.wait([
+        ApiService.instance.getVehicles(),
+        ApiService.instance.getInterventions(vehicleId: _selectedVehicleId),
+      ]);
+
+      final rawVehicles = (results[0] as List?) ?? [];
+      final rawInterventions = (results[1] as List?) ?? [];
+
+      if (!mounted) return;
+
+      setState(() {
+        _vehicles = rawVehicles
+            .map((e) {
+              try { return VehicleModel.fromJson(e as Map<String, dynamic>); }
+              catch (_) { return null; }
+            })
+            .whereType<VehicleModel>()
+            .toList();
+
+        _interventions = rawInterventions
+            .map((e) {
+              try { return InterventionModel.fromJson(e as Map<String, dynamic>); }
+              catch (_) { return null; }
+            })
+            .whereType<InterventionModel>()
+            .toList();
+
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  /// Recharge uniquement les interventions (changement de véhicule).
+  Future<void> _reloadInterventions() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final raw = await ApiService.instance.getInterventions(
+        vehicleId: _selectedVehicleId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _interventions = raw
+            .map((e) {
+              try { return InterventionModel.fromJson(e as Map<String, dynamic>); }
+              catch (_) { return null; }
+            })
+            .whereType<InterventionModel>()
+            .toList();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  /// Change le véhicule sélectionné et recharge.
+  void _onVehicleChanged(String? vehicleId) {
+    if (_selectedVehicleId == vehicleId) return;
+    setState(() => _selectedVehicleId = vehicleId);
+    _reloadInterventions();
+  }
+
+  /// Filtre les interventions par période (client-side).
+  List<InterventionModel> get _filtered => _interventions
+      .where((i) => matchesDateFilter(i.createdAt, _selectedFilter))
+      .toList();
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      // FIX : intercepte le bouton retour Android pour naviguer vers /user/home
-      // au lieu de quitter l'app ou relancer le splash.
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) context.go('/user/home');
@@ -38,7 +123,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Mes interventions'),
-          // FIX : bouton retour explicite → accueil carte
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => context.go('/user/home'),
@@ -46,49 +130,95 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
         body: Column(
           children: [
+            // Filtre véhicule (S15) — affiché seulement si >1 véhicule
+            if (_vehicles.length > 1) _buildVehicleChips(),
             // Filtre période (S14)
             DateRangeFilter(
               selected: _selectedFilter,
               onChanged: (f) => setState(() => _selectedFilter = f),
             ),
-            Expanded(
-              child: FutureBuilder<List<dynamic>>(
-                future: ApiService.instance.getInterventions(),
-                builder: (_, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snap.hasError) {
-                    return Center(child: Text('Erreur : ${snap.error}'));
-                  }
-                  final rawList = snap.data ?? [];
-                  final all = rawList
-                      .map((e) {
-                        try { return InterventionModel.fromJson(e as Map<String, dynamic>); }
-                        catch (_) { return null; }
-                      })
-                      .whereType<InterventionModel>()
-                      .toList();
-
-                  // Application du filtre période (S14)
-                  final list = _filterByDate(all);
-
-                  if (list.isEmpty) return _Empty();
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: list.length,
-                    itemBuilder: (_, i) => _InterventionTile(
-                      intervention: list[i],
-                      onTap: () {
-                        if (list[i].isActive) context.go('/user/tracking/${list[i].id}');
-                      },
-                    ),
-                  );
-                },
-              ),
-            ),
+            Expanded(child: _buildBody()),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Chips véhicule (S15).
+  Widget _buildVehicleChips() {
+    return SizedBox(
+      height: 52,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        itemCount: _vehicles.length + 1,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          if (i == 0) {
+            // "Tous les véhicules"
+            return _chip(
+              label: 'Tous',
+              isSelected: _selectedVehicleId == null,
+              onTap: () => _onVehicleChanged(null),
+            );
+          }
+          final v = _vehicles[i - 1];
+          return _chip(
+            label: v.plate,
+            isSelected: _selectedVehicleId == v.id,
+            onTap: () => _onVehicleChanged(v.id),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _chip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : AppColors.surface,
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.border,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: isSelected ? Colors.white : AppColors.textPrimary,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(child: Text('Erreur : $_error'));
+    }
+    final list = _filtered;
+    if (list.isEmpty) return _Empty();
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: list.length,
+      itemBuilder: (_, i) => _InterventionTile(
+        intervention: list[i],
+        onTap: () {
+          if (list[i].isActive) context.go('/user/tracking/${list[i].id}');
+        },
       ),
     );
   }
