@@ -148,9 +148,15 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<List<dynamic>> getInterventions({int page = 1}) async {
+  Future<List<dynamic>> getInterventions({
+    int page = 1,
+    String? vehicleId,   // S15 : filtre par véhicule (optionnel)
+  }) async {
     try {
-      final res = await get('/user/interventions', params: {'page': page});
+      final res = await get('/user/interventions', params: {
+        'page': page,
+        if (vehicleId != null) 'vehicle_id': vehicleId,
+      });
       return (res.data['data'] as List?) ?? [];
     } catch (_) { return []; }
   }
