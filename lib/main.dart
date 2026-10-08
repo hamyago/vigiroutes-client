@@ -334,7 +334,8 @@ class _RouterWidgetState extends State<_RouterWidget> {
           NotificationRouterService.instance.consumePendingRoute();
       if (route != null) {
         debugPrint('[Nav] Navigation post-mount vers : $route');
-        _router.push(route, extra: extra);
+        // FIX S13.6.1 : go() au lieu de push() → évite la pile
+        _router.go(route, extra: extra);
       }
     });
   }
