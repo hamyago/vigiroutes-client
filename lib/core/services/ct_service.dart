@@ -221,6 +221,20 @@ class CtService {
     return CtBookingModel.fromJson(obj);
   }
 
+  /// Récupère les photos (pickup + delivery) d'une mission transport (S16.2).
+  ///
+  /// Endpoint backend : GET /ct/transport/missions/{id}/photos
+  /// Accessible au transporteur assigné ET au client propriétaire.
+  Future<Map<String, dynamic>> getMissionPhotos(String bookingId) async {
+    try {
+      final res = await _api.get('/ct/transport/missions/$bookingId/photos');
+      return (res.data['data'] as Map<String, dynamic>?) ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+
   /// POST /ct/bookings/{id}/cancel
   Future<void> cancelBooking(String bookingId) async {
     await _api.post('/ct/bookings/$bookingId/cancel');

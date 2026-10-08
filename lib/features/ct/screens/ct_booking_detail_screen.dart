@@ -8,6 +8,7 @@ import '../../../core/models/vehicle_model.dart';
 import '../../../core/services/ct_service.dart';
 import '../widgets/transport_timeline.dart';
 import '../widgets/ct_contact_section.dart';
+import '../widgets/vehicle_photos_section.dart';
 
 class CtBookingDetailScreen extends StatefulWidget {
   final String bookingId;
@@ -328,6 +329,13 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
           TransportTimeline(booking: b),
           const SizedBox(height: 16),
         ],
+
+        // ── Photos du véhicule (S16.2) ────────────────────────────────
+        VehiclePhotosSection(
+          bookingId: b.id,
+          transporterStatus: b.transporterStatus,
+        ),
+        const SizedBox(height: 16),
 
         // ── QR code conditionnel (Option D) ─────────────────────────────────
         // Le QR est affiché tant que le créneau est dans le futur OU
