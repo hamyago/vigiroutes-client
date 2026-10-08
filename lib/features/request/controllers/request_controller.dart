@@ -28,6 +28,7 @@ class RequestController extends ChangeNotifier {
   String?               _createdInterventionId;
   LatLng?               _userPosition;
   String?               _userAddress;
+  String?               _selectedVehicleId;   // S15.2 : véhicule concerné
   RequestMode           _mode          = RequestMode.manual;
 
   RequestStep           get step                   => _step;
@@ -41,6 +42,7 @@ class RequestController extends ChangeNotifier {
   String?               get createdInterventionId  => _createdInterventionId;
   LatLng?               get userPosition           => _userPosition;
   String?               get userAddress            => _userAddress;
+  String?               get selectedVehicleId      => _selectedVehicleId;
   bool                  get isAuto                 => _mode == RequestMode.auto;
 
   // Charger depuis l'API au lieu des données statiques
@@ -209,6 +211,14 @@ class RequestController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Définit le véhicule concerné par l'intervention (S15.2).
+  /// Passe null pour "Non précisé".
+  void setVehicleId(String? id) {
+    if (_selectedVehicleId == id) return;
+    _selectedVehicleId = id;
+    notifyListeners();
+  }
+
   Future<bool> submitRequest({
     required UserModel user,
     String transportMode = 'self',
@@ -227,6 +237,7 @@ class RequestController extends ChangeNotifier {
         'service_type_id':   _selectedService!.id,
         'service_type_name': _selectedService!.name,
         if (_selectedProvider != null) 'provider_id': _selectedProvider!.id,
+        if (_selectedVehicleId != null) 'vehicle_id': _selectedVehicleId,  // S15.2
         'user_latitude':     _userPosition!.latitude,
         'user_longitude':    _userPosition!.longitude,
         'user_address':      _userAddress,

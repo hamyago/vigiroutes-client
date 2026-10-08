@@ -13,6 +13,7 @@ import '../../../core/models/service_type_model.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/service_type_service.dart';
 import '../../../shared/widgets/custom_button.dart';
+import '../widgets/confirm_request_sheet.dart';
 
 double _estimateNum(dynamic v) {
   if (v == null) return 0;
@@ -867,11 +868,24 @@ class _ConfirmStepState extends State<_ConfirmStep> {
             icon: Icons.sos,
             onPressed: () async {
               if (auth.user == null) return;
-              final ok = await ctrl.submitRequest(
-                user: auth.user!,
-                transportMode: 'self',
+
+              // Ouvre le bottom sheet de confirmation (S15.2)
+              final confirmed = await ConfirmRequestSheet.show(
+                context: context,
+                ctrl: ctrl,
+                formatPrice: () {
+                  final total = _estimateNum(ctrl.estimate?['total_price']);
+                  return total > 0 ? _fmt(total) : null;
+                },
+                onConfirm: () async {
+                  await ctrl.submitRequest(
+                    user: auth.user!,
+                    transportMode: 'self',
+                  );
+                },
               );
-              if (!ok || !context.mounted) return;
+
+              if (!confirmed || !context.mounted) return;
 
               final interventionId = ctrl.createdInterventionId;
               if (interventionId == null) return;
