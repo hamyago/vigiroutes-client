@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/vehicle_model.dart';
 import '../../../core/services/ct_service.dart';
 import '../widgets/transport_timeline.dart';
+import '../widgets/ct_contact_section.dart';
 
 class CtBookingDetailScreen extends StatefulWidget {
   final String bookingId;
@@ -239,6 +240,10 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
           if (b.center.contactPhone != null)
             _InfoRow(label: 'Téléphone', value: b.center.contactPhone!),
         ]),
+        const SizedBox(height: 16),
+
+        // ── Section Contact (S13.6) ──────────────────────────────────
+        CtContactSection(booking: b),
         const SizedBox(height: 16),
 
         // ── Suivi du transport (si tow/driver) ────────────────────────
