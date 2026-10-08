@@ -5,9 +5,26 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/utils/price_calculator.dart';
+import '../../../shared/utils/date_filter_utils.dart';
+import '../../../shared/widgets/date_range_filter.dart';
 
-class HistoryScreen extends StatelessWidget {
+class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
+
+  @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  /// Filtre période sélectionné (S14).
+  DateFilter _selectedFilter = DateFilter.all;
+
+  /// Filtre une liste d'interventions par période.
+  List<InterventionModel> _filterByDate(List<InterventionModel> items) {
+    return items
+        .where((i) => matchesDateFilter(i.createdAt, _selectedFilter))
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,35 +44,50 @@ class HistoryScreen extends StatelessWidget {
             onPressed: () => context.go('/user/home'),
           ),
         ),
-        body: FutureBuilder<List<dynamic>>(
-          future: ApiService.instance.getInterventions(),
-          builder: (_, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snap.hasError) {
-              return Center(child: Text('Erreur : ${snap.error}'));
-            }
-            final rawList = snap.data ?? [];
-            final List<InterventionModel> list = rawList
-                .map((e) {
-                  try { return InterventionModel.fromJson(e as Map<String, dynamic>); }
-                  catch (_) { return null; }
-                })
-                .whereType<InterventionModel>()
-                .toList();
-            if (list.isEmpty) return _Empty();
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: list.length,
-              itemBuilder: (_, i) => _InterventionTile(
-                intervention: list[i],
-                onTap: () {
-                  if (list[i].isActive) context.go('/user/tracking/${list[i].id}');
+        body: Column(
+          children: [
+            // Filtre période (S14)
+            DateRangeFilter(
+              selected: _selectedFilter,
+              onChanged: (f) => setState(() => _selectedFilter = f),
+            ),
+            Expanded(
+              child: FutureBuilder<List<dynamic>>(
+                future: ApiService.instance.getInterventions(),
+                builder: (_, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snap.hasError) {
+                    return Center(child: Text('Erreur : ${snap.error}'));
+                  }
+                  final rawList = snap.data ?? [];
+                  final all = rawList
+                      .map((e) {
+                        try { return InterventionModel.fromJson(e as Map<String, dynamic>); }
+                        catch (_) { return null; }
+                      })
+                      .whereType<InterventionModel>()
+                      .toList();
+
+                  // Application du filtre période (S14)
+                  final list = _filterByDate(all);
+
+                  if (list.isEmpty) return _Empty();
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: list.length,
+                    itemBuilder: (_, i) => _InterventionTile(
+                      intervention: list[i],
+                      onTap: () {
+                        if (list[i].isActive) context.go('/user/tracking/${list[i].id}');
+                      },
+                    ),
+                  );
                 },
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );
