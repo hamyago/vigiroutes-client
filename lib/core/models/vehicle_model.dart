@@ -476,13 +476,25 @@ class CtBookingModel {
   }
 
   /// Position dans la timeline (0 à 5, -1 si pas commencé).
+  /// Index du DERNIER step complété dans la timeline transport.
+  ///
+  /// ⚠️ S13.6.3 : corrige le décalage de +1 qui faisait apparaître l'étape
+  /// suivante comme complétée dès que la précédente était finie.
+  ///
+  ///   - 0 = Transporteur en route
+  ///   - 1 = Véhicule récupéré
+  ///   - 2 = Arrivé au centre
+  ///   - 3 = Retour en cours
+  ///   - 4 = Véhicule livré
+  ///   - 5 = Livraison validée (signature client)
+  ///   - -1 = Aucun step commencé
   int get transportStepIndex {
-    if (transporterReturnedAt != null) return 5;
-    if (transporterReturnStartedAt != null) return 4;
-    if (transporterDeliveredAt != null) return 3;
-    if (transporterPickedUpAt != null) return 2;
-    if (transporterEnRouteAt != null) return 1;
-    if (transporterStatus == 'pending') return 0;
+    if (transporterCompletedAt != null) return 5;
+    if (transporterReturnedAt != null) return 4;
+    if (transporterReturnStartedAt != null) return 3;
+    if (transporterDeliveredAt != null) return 2;
+    if (transporterPickedUpAt != null) return 1;
+    if (transporterEnRouteAt != null) return 0;
     return -1;
   }
 
