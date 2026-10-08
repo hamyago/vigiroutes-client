@@ -317,8 +317,15 @@ class NotificationRouterService {
     );
   }
 
-  /// ⚠️ FIX COLD START : si le router n'est pas encore monté, on stocke la
-  /// route dans _pendingRoute. Le router la consomme dès son initState.
+  /// Navigation déclenchée par une notification.
+  ///
+  /// ⚠️ FIX S13.6.1 : on utilise `go()` (et pas `push()`) pour REMPLACER
+  /// la pile de navigation. Sans ça, chaque tap sur une notif empile un
+  /// nouvel écran et l'utilisateur doit appuyer N fois sur "Retour" pour
+  /// revenir à l'accueil.
+  ///
+  /// Si le router n'est pas encore monté (cold start), on stocke la route
+  /// dans `_pendingRoute` — le router la consomme à son initState.
   void _navigate(String route, {Object? extra}) {
     final context = navigatorKey.currentContext;
     if (context == null) {
@@ -328,9 +335,9 @@ class NotificationRouterService {
       return;
     }
     try {
-      context.push(route, extra: extra);
+      context.go(route, extra: extra);
     } catch (e) {
-      debugPrint('[Nav] Échec push immédiat, mise en attente : $e');
+      debugPrint('[Nav] Échec go immédiat, mise en attente : $e');
       _pendingRoute = route;
       _pendingExtra = extra;
     }

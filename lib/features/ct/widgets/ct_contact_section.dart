@@ -123,7 +123,7 @@ class CtContactSection extends StatelessWidget {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () => _call(booking.transporterPhone!),
+                onPressed: () => _call(context, booking.transporterPhone!),
                 icon: const Icon(Icons.phone_rounded, size: 18),
                 label: const Text('Appeler'),
                 style: OutlinedButton.styleFrom(
@@ -140,6 +140,7 @@ class CtContactSection extends StatelessWidget {
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: () => _whatsapp(
+                  context,
                   booking.transporterPhone!,
                   'Bonjour, je vous contacte au sujet de ma réservation ${booking.reference}.',
                 ),
@@ -192,41 +193,137 @@ class CtContactSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () => _call(booking.center.contactPhone!),
-            icon: const Icon(Icons.phone_rounded, size: 18),
-            label: const Text('Appeler le centre'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: BorderSide(color: AppColors.primary),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _call(context, booking.center.contactPhone!),
+                icon: const Icon(Icons.phone_rounded, size: 18),
+                label: const Text('Appeler'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(color: AppColors.primary),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _whatsapp(
+                  context,
+                  booking.center.contactPhone!,
+                  'Bonjour, je vous contacte au sujet de ma réservation '
+                      '${booking.reference} pour le véhicule '
+                      '${booking.vehicle.registrationNumber}.',
+                ),
+                icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                label: const Text('WhatsApp'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF25D366),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Future<void> _call(String phone) async {
-    final cleaned = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+  /// Lance un appel téléphonique.
+  ///
+  /// ⚠️ S13.6.1 : on n'utilise plus `canLaunchUrl()` (peu fiable sur Android).
+  /// On tente directement `launchUrl()` et on affiche un feedback en cas
+  /// d'échec (SnackBar), plutôt que de laisser le clic muet.
+  Future<void> _call(BuildContext context, String phone) async {
+    // Capture AVANT tout await (évite le warning use_build_context_synchronously)
+    final messenger = ScaffoldMessenger.of(context);
+
+    final cleaned = _normalizePhone(phone);
+    if (cleaned.isEmpty) {
+      _showSnack(messenger, 'Numéro invalide : $phone');
+      return;
+    }
+
     final uri = Uri(scheme: 'tel', path: cleaned);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) {
+        _showSnack(messenger, 'Impossible de lancer l\'appel vers $cleaned');
+      }
+    } catch (e) {
+      debugPrint('[CtContactSection] Erreur appel: $e');
+      _showSnack(messenger, 'Erreur lors de l\'appel : $e');
     }
   }
 
-  Future<void> _whatsapp(String phone, String message) async {
-    final cleaned = phone.replaceAll(RegExp(r'[^0-9]'), '');
+  /// Ouvre WhatsApp avec un message pré-rempli.
+  ///
+  /// ⚠️ S13.6.1 : idem, `launchUrl()` direct + feedback en cas d'échec.
+  Future<void> _whatsapp(
+    BuildContext context,
+    String phone,
+    String message,
+  ) async {
+    // Capture AVANT tout await (évite le warning use_build_context_synchronously)
+    final messenger = ScaffoldMessenger.of(context);
+
+    final cleaned = _normalizePhone(phone, withPlus: false);
+    if (cleaned.isEmpty) {
+      _showSnack(messenger, 'Numéro invalide : $phone');
+      return;
+    }
+
     final uri = Uri.parse(
       'https://wa.me/$cleaned?text=${Uri.encodeComponent(message)}',
     );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) {
+        _showSnack(messenger, 'Impossible d\'ouvrir WhatsApp');
+      }
+    } catch (e) {
+      debugPrint('[CtContactSection] Erreur WhatsApp: $e');
+      _showSnack(messenger, 'Erreur WhatsApp : $e');
     }
+  }
+
+  /// Normalise un numéro pour l'appel ou WhatsApp.
+  ///
+  /// - Retire tout sauf chiffres et +
+  /// - Si le numéro local commence par 0 et fait 10 chiffres
+  ///   → ajoute l'indicatif Côte d'Ivoire (+225 ou 225)
+  /// - withPlus=true (défaut) : retourne "+225..."
+  /// - withPlus=false : retourne "225..." (format wa.me)
+  String _normalizePhone(String phone, {bool withPlus = true}) {
+    var cleaned = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (cleaned.isEmpty) return '';
+
+    // Retire le + en tête pour analyse
+    if (cleaned.startsWith('+')) cleaned = cleaned.substring(1);
+
+    // Retire les 00 en tête
+    if (cleaned.startsWith('00')) cleaned = cleaned.substring(2);
+
+    // Format local CI (10 chiffres commençant par 0) → ajoute indicatif 225
+    if (cleaned.length == 10 && cleaned.startsWith('0')) {
+      cleaned = '225$cleaned';
+    }
+
+    return withPlus ? '+$cleaned' : cleaned;
+  }
+
+  void _showSnack(ScaffoldMessengerState messenger, String msg) {
+    messenger.showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
+    );
   }
 }
