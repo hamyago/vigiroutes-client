@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/vehicle_model.dart';
@@ -21,10 +24,56 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
   bool _cancelling = false;
   bool _isRegeneratingQr = false;
 
+  /// ⏱️ Timer de rafraîchissement automatique (S13.6.2).
+  /// Recharge le booking toutes les 15s tant qu'il n'est pas terminé.
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _startPolling();
+  }
+
+  @override
+  void dispose() {
+    _stopPolling();
+    super.dispose();
+  }
+
+  /// Démarre le polling de rafraîchissement (S13.6.2).
+  void _startPolling() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!mounted) return;
+      final b = _booking;
+      if (b == null) return;
+      // On arrête le polling si le booking est terminé ou annulé
+      if (b.isCompleted || b.isCancelled) {
+        _stopPolling();
+        return;
+      }
+      _refreshSilently();
+    });
+  }
+
+  /// Arrête le polling.
+  void _stopPolling() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+  }
+
+  /// Recharge le booking sans afficher le loader (rafraîchissement discret).
+  Future<void> _refreshSilently() async {
+    try {
+      final b = await CtService.instance.getBooking(widget.bookingId);
+      if (!mounted) return;
+      setState(() => _booking = b);
+      // Si le booking est maintenant terminé/annulé, on stoppe
+      if (b.isCompleted || b.isCancelled) _stopPolling();
+    } catch (_) {
+      // Erreur silencieuse : on retente au prochain tick
+    }
   }
 
   Future<void> _load() async {
@@ -171,9 +220,37 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Intercepte le bouton retour natif Android.
+    // Sans ça, `go()` ayant remplacé la pile, le retour sort de l'app.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/ct/bookings');
+        }
+      },
+      child: _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Retour',
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/ct/bookings');
+            }
+          },
+        ),
         title: const Text('Détail du rendez-vous',
             style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
         backgroundColor: AppColors.surface,
