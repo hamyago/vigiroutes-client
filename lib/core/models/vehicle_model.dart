@@ -390,6 +390,11 @@ class CtBookingModel {
   final DateTime? transporterReturnedAt;
   final DateTime? transporterCompletedAt;
 
+  // ── Infos transporteur assigné (S13.6) ────────────────────────
+  final String? transporterName;
+  final String? transporterPhone;
+  final String? transporterType;
+
   const CtBookingModel({
     required this.id,
     required this.reference,
@@ -421,6 +426,10 @@ class CtBookingModel {
     this.transporterReturnStartedAt,
     this.transporterReturnedAt,
     this.transporterCompletedAt,
+    // Infos transporteur (S13.6)
+    this.transporterName,
+    this.transporterPhone,
+    this.transporterType,
   });
 
   bool get hasQr =>
@@ -476,6 +485,16 @@ class CtBookingModel {
     if (transporterStatus == 'pending') return 0;
     return -1;
   }
+
+  /// Vrai si on peut appeler/contacter le transporteur (S13.6).
+  bool get canContactTransporter =>
+      hasAssignedTransporter &&
+      transporterPhone != null &&
+      transporterPhone!.isNotEmpty;
+
+  /// Vrai si on peut appeler le centre CT (S13.6).
+  bool get canContactCenter =>
+      center.contactPhone != null && center.contactPhone!.isNotEmpty;
 
   static double _dbl(dynamic v) {
     if (v == null) return 0;
@@ -560,6 +579,11 @@ class CtBookingModel {
       transporterReturnStartedAt:   _dt(json['transporter_return_started_at']),
       transporterReturnedAt:        _dt(json['transporter_returned_at']),
       transporterCompletedAt:       _dt(json['transporter_completed_at']),
+
+      // ── Infos transporteur (S13.6) ──
+      transporterName:  json['transporter_name'] as String?,
+      transporterPhone: json['transporter_phone'] as String?,
+      transporterType:  json['transporter_type'] as String?,
     );
   }
 }
