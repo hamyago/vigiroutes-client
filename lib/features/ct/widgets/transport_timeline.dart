@@ -126,6 +126,12 @@ class TransportTimeline extends StatelessWidget {
         time: booking.transporterReturnedAt,
         icon: Icons.check_circle_rounded,
       ),
+      // S13.6.2 : étape finale (signature client)
+      _TimelineStep(
+        label: 'Livraison validée',
+        time: booking.transporterCompletedAt,
+        icon: Icons.verified_rounded,
+      ),
     ];
 
     final currentIndex = booking.transportStepIndex;
