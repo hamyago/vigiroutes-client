@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/ct_quote_model.dart';
+import '../../../shared/utils/date_filter_utils.dart';
+import '../../../shared/widgets/date_range_filter.dart';
 import '../controllers/ct_quote_controller.dart';
 
 class CtQuoteRequestsScreen extends StatefulWidget {
@@ -13,12 +15,22 @@ class CtQuoteRequestsScreen extends StatefulWidget {
 }
 
 class _CtQuoteRequestsScreenState extends State<CtQuoteRequestsScreen> {
+  /// Filtre période sélectionné (S14).
+  DateFilter _selectedFilter = DateFilter.all;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CtQuoteController>().loadRequests();
     });
+  }
+
+  /// Filtre une liste de demandes de devis par période.
+  List<CtQuoteRequestModel> _filterByDate(List<CtQuoteRequestModel> items) {
+    return items
+        .where((r) => matchesDateFilter(r.createdAt, _selectedFilter))
+        .toList();
   }
 
   @override
@@ -58,13 +70,21 @@ class _CtQuoteRequestsScreenState extends State<CtQuoteRequestsScreen> {
           ),
         ],
       ),
-      body: Consumer<CtQuoteController>(
-        builder: (context, ctrl, _) {
-          if (ctrl.isLoadingList) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            );
-          }
+      body: Column(
+        children: [
+          // Filtre période (S14)
+          DateRangeFilter(
+            selected: _selectedFilter,
+            onChanged: (f) => setState(() => _selectedFilter = f),
+          ),
+          Expanded(
+            child: Consumer<CtQuoteController>(
+              builder: (context, ctrl, _) {
+                if (ctrl.isLoadingList) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  );
+                }
           if (ctrl.listError != null) {
             return Center(
               child: Column(
@@ -83,7 +103,9 @@ class _CtQuoteRequestsScreenState extends State<CtQuoteRequestsScreen> {
               ),
             );
           }
-          if (ctrl.requests.isEmpty) {
+          final filtered = _filterByDate(ctrl.requests);
+
+          if (filtered.isEmpty) {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -120,15 +142,18 @@ class _CtQuoteRequestsScreenState extends State<CtQuoteRequestsScreen> {
             onRefresh: ctrl.loadRequests,
             child: ListView.separated(
               padding: const EdgeInsets.all(16),
-              itemCount: ctrl.requests.length,
+              itemCount: filtered.length,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (context, i) => _RequestCard(
-                request: ctrl.requests[i],
-                onTap: () => context.push('/ct/quote/${ctrl.requests[i].id}'),
+                request: filtered[i],
+                onTap: () => context.push('/ct/quote/${filtered[i].id}'),
               ),
             ),
           );
-        },
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

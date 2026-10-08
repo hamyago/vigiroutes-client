@@ -12,6 +12,8 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/vehicle_model.dart';
 import '../../../core/services/ct_service.dart';
+import '../../../shared/utils/date_filter_utils.dart';
+import '../../../shared/widgets/date_range_filter.dart';
 import 'ct_booking_detail_screen.dart';
 
 class CtBookingsScreen extends StatefulWidget {
@@ -25,6 +27,14 @@ class _CtBookingsScreenState extends State<CtBookingsScreen> {
   List<CtBookingModel> _bookings = [];
   bool _loading = true;
   String? _error;
+
+  /// Filtre période sélectionné (S14).
+  DateFilter _selectedFilter = DateFilter.all;
+
+  /// Liste filtrée par période sélectionnée.
+  List<CtBookingModel> get _filteredBookings => _bookings
+      .where((b) => matchesDateFilter(b.slotStartsAt, _selectedFilter))
+      .toList();
 
   @override
   void initState() {
@@ -69,31 +79,43 @@ class _CtBookingsScreenState extends State<CtBookingsScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : _error != null
-              ? _buildError()
-              : _bookings.isEmpty
-                  ? _buildEmpty()
-                  : RefreshIndicator(
-                      color: AppColors.primary,
-                      onRefresh: _load,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _bookings.length,
-                        itemBuilder: (_, i) => _BookingCard(
-                          booking: _bookings[i],
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CtBookingDetailScreen(
-                                bookingId: _bookings[i].id,
+      body: Column(
+        children: [
+          // Filtre période (S14)
+          DateRangeFilter(
+            selected: _selectedFilter,
+            onChanged: (f) => setState(() => _selectedFilter = f),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary))
+                : _error != null
+                    ? _buildError()
+                    : _filteredBookings.isEmpty
+                        ? _buildEmpty()
+                        : RefreshIndicator(
+                            color: AppColors.primary,
+                            onRefresh: _load,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _filteredBookings.length,
+                              itemBuilder: (_, i) => _BookingCard(
+                                booking: _filteredBookings[i],
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CtBookingDetailScreen(
+                                      bookingId: _filteredBookings[i].id,
+                                    ),
+                                  ),
+                                ).then((_) => _load()), // Refresh au retour
                               ),
                             ),
-                          ).then((_) => _load()), // Refresh au retour
-                        ),
-                      ),
-                    ),
+                          ),
+          ),
+        ],
+      ),
     );
   }
 
