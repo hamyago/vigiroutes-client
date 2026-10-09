@@ -234,6 +234,37 @@ class CtService {
     }
   }
 
+  /// Récupère la notation du transporteur pour un booking (S17.3).
+  ///
+  /// Retourne null si aucune note n'existe encore.
+  Future<Map<String, dynamic>?> getTransporterRating(String bookingId) async {
+    try {
+      final res = await _api.get('/ct/transport/missions/$bookingId/rate');
+      return res.data['data'] as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Crée ou met à jour la notation du transporteur (S17.3).
+  ///
+  /// Retourne true si succès, false sinon.
+  Future<bool> rateTransporter({
+    required String bookingId,
+    required int rating,
+    String? comment,
+  }) async {
+    try {
+      await _api.post('/ct/transport/missions/$bookingId/rate', data: {
+        'rating': rating,
+        if (comment != null && comment.isNotEmpty) 'comment': comment,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
 
   /// POST /ct/bookings/{id}/cancel
   Future<void> cancelBooking(String bookingId) async {

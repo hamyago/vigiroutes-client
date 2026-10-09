@@ -381,6 +381,10 @@ class CtBookingModel {
   final DateTime? nextVtDueDate;
   final DateTime createdAt;
 
+  // ── Étapes CT (S17.1) ──────────────────────────────────────────
+  final DateTime? arrivedAt;
+  final DateTime? inspectionStartedAt;
+
   // ── Suivi transport (dépanneur / chauffeur) ─────────────────────────
   final String? transporterStatus;
   final DateTime? transporterEnRouteAt;
@@ -417,6 +421,8 @@ class CtBookingModel {
     this.vtReportNotes,
     this.vtCompletedAt,
     this.nextVtDueDate,
+    this.arrivedAt,
+    this.inspectionStartedAt,
     required this.createdAt,
     // Suivi transport
     this.transporterStatus,
@@ -580,6 +586,8 @@ class CtBookingModel {
       vtResult:            json['vt_result']?.toString(),
       vtReportNotes:       json['vt_report_notes']?.toString(),
       vtCompletedAt:       _dt(json['vt_completed_at']),
+      arrivedAt:           _dt(json['arrived_at']),
+      inspectionStartedAt: _dt(json['inspection_started_at']),
       nextVtDueDate:       _dt(json['next_vt_due_date']),
       createdAt:           _dt(json['created_at']) ?? DateTime.now(),
 
