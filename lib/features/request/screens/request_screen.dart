@@ -804,7 +804,8 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                   if (ctrl.isAuto)
                     const _Row('Affectation', 'Automatique'),
                   _Row('Position', ctrl.userAddress ?? 'Position GPS'),
-                  _Row('Paiement', _paymentLabel(ctrl.paymentMethod)),
+                  if (!ctrl.isAuto)
+                    _Row('Paiement', _paymentLabel(ctrl.paymentMethod)),
 
                   // ── Devis API (distance + base) ──────────────────────────
                   if (ctrl.estimateLoading)
@@ -839,15 +840,17 @@ class _ConfirmStepState extends State<_ConfirmStep> {
           // réservés au flux CT.
           const SizedBox(height: 8),
 
-          // ── Mode de paiement ─────────────────────────────────────────────
-          const Text('Mode de paiement',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-          const SizedBox(height: 8),
-          _PaymentMethods(
-            selected: ctrl.paymentMethod,
-            onSelect: ctrl.setPaymentMethod,
-          ),
-          const SizedBox(height: 16),
+          // ── Mode de paiement (S21.2 : masqué en dépannage auto — gratuit) ──
+          if (!ctrl.isAuto) ...[
+            const Text('Mode de paiement',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            const SizedBox(height: 8),
+            _PaymentMethods(
+              selected: ctrl.paymentMethod,
+              onSelect: ctrl.setPaymentMethod,
+            ),
+            const SizedBox(height: 16),
+          ],
 
           if (ctrl.submitError == SubmitError.generic) ...[
             Container(

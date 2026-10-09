@@ -243,7 +243,7 @@ class _ConfirmRequestSheetState extends State<ConfirmRequestSheet> {
         if (ctrl.estimate != null) ...[
           const SizedBox(height: 8),
           _recapRow(
-            Icons.attach_money_rounded,
+            Icons.payments_rounded,
             widget.formatPrice() ?? '—',
             highlight: true,
           ),

@@ -2,6 +2,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'api_service.dart';
+
 class LocationData {
   final double latitude;
   final double longitude;
@@ -85,8 +87,24 @@ class LocationService {
 
   Stream<LocationData> positionStream() => const Stream.empty();
 
+  /// Reverse geocoding via le backend (S21.2).
+  ///
+  /// Appelle `GET /geocode?lat=&lng=` qui utilise Nominatim côté serveur
+  /// (cache Redis 30 jours). Retourne les coordonnées brutes en fallback
+  /// si l'appel échoue.
   Future<String?> getAddressFromCoords(double lat, double lng) async {
-    return '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+    try {
+      final res = await ApiService.instance.get('/geocode', params: {
+        'lat': lat,
+        'lng': lng,
+      });
+      final addr = res.data['data']?['address'] as String?;
+      if (addr != null && addr.isNotEmpty) return addr;
+      return '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+    } catch (e) {
+      debugPrint('[Location] getAddressFromCoords error: $e');
+      return '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+    }
   }
 
   double distanceBetween(double lat1, double lng1, double lat2, double lng2) {
