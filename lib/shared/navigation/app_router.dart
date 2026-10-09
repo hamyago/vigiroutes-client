@@ -143,6 +143,30 @@ GoRouter buildRouter(AuthController auth) => GoRouter(
       initialLocation: '/',
       refreshListenable: auth,
       observers: [homeRouteObserver],
+
+      // S20 — Fallback : route inexistante → redirection automatique
+      // Évite l'écran 'Page Not Found' quand une notification pointe
+      // vers une route inconnue (ex: ancien /ct/vehicles).
+      errorBuilder: (ctx, state) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!ctx.mounted) return;
+          final isAuth = auth.state == AuthState.authenticated;
+          if (!isAuth) {
+            ctx.go('/onboarding');
+          } else if (auth.isProvider) {
+            ctx.go('/provider/home');
+          } else {
+            ctx.go('/user/home');
+          }
+        });
+        return const Scaffold(
+          backgroundColor: Colors.white,
+          body: Center(
+            child: CircularProgressIndicator(color: Color(0xFFFF6B35)),
+          ),
+        );
+      },
+
       redirect: (ctx, state) {
         final loc       = state.matchedLocation;
         final authState = auth.state;
