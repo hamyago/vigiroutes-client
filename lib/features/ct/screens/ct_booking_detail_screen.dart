@@ -9,6 +9,7 @@ import '../../../core/services/ct_service.dart';
 import '../widgets/transport_timeline.dart';
 import '../widgets/ct_contact_section.dart';
 import '../widgets/vehicle_photos_section.dart';
+import '../widgets/rate_transporter_sheet.dart';
 
 class CtBookingDetailScreen extends StatefulWidget {
   final String bookingId;
@@ -24,6 +25,10 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
   String? _error;
   bool _cancelling = false;
   bool _isRegeneratingQr = false;
+
+  /// Notation du transporteur (S17.4) — null si pas encore noté.
+  Map<String, dynamic>? _rating;
+  bool _submittingRating = false;
 
   /// ⏱️ Timer de rafraîchissement automatique (S13.6.2).
   /// Recharge le booking toutes les 15s tant qu'il n'est pas terminé.
@@ -80,10 +85,70 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final b = await CtService.instance.getBooking(widget.bookingId);
-      setState(() { _booking = b; _loading = false; });
+      // Charger booking + rating en parallèle (S17.4)
+      final results = await Future.wait([
+        CtService.instance.getBooking(widget.bookingId),
+        CtService.instance.getTransporterRating(widget.bookingId),
+      ]);
+
+      if (!mounted) return;
+      setState(() {
+        _booking = results[0] as CtBookingModel;
+        _rating = results[1] as Map<String, dynamic>?;
+        _loading = false;
+      });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  /// Ouvre le sheet de notation et envoie l'avis (S17.4).
+  Future<void> _onRate() async {
+    final b = _booking;
+    if (b == null || _submittingRating) return;
+
+    final result = await RateTransporterSheet.show(
+      context: context,
+      transporterName: b.transporterName ?? 'Transporteur',
+      initialRating: (_rating?['rating'] as num?)?.toInt(),
+      initialComment: _rating?['comment'] as String?,
+    );
+
+    if (result == null || !mounted) return;
+
+    setState(() => _submittingRating = true);
+
+    final ok = await CtService.instance.rateTransporter(
+      bookingId: widget.bookingId,
+      rating: result.rating,
+      comment: result.comment,
+    );
+
+    if (!mounted) return;
+
+    setState(() => _submittingRating = false);
+
+    if (ok) {
+      // Recharger le rating
+      final fresh = await CtService.instance
+          .getTransporterRating(widget.bookingId);
+      if (!mounted) return;
+      setState(() => _rating = fresh);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Merci pour votre avis !'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossible d\'enregistrer votre avis. Réessayez.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 
@@ -266,6 +331,17 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
     );
   }
 
+  /// Vrai si l'utilisateur peut noter le transporteur (S17.4).
+  bool _canRate(CtBookingModel b) {
+    // Livraison validée
+    if (b.transporterCompletedAt == null) return false;
+    // Pas encore noté
+    if (_rating != null) return false;
+    // Transporteur assigné
+    if (b.transporterName == null) return false;
+    return true;
+  }
+
   Widget _buildContent() {
     final b = _booking!;
     final canCancel = b.status == 'pending' || b.status == 'confirmed';
@@ -326,7 +402,14 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
 
         // ── Suivi du transport (si tow/driver) ────────────────────────
         if (b.hasTransportTracking) ...[
-          TransportTimeline(booking: b),
+          TransportTimeline(
+            booking: b,
+            rating: (_rating?['rating'] as num?)?.toInt(),
+            ratingCreatedAt: _rating?['created_at'] != null
+                ? DateTime.tryParse(_rating!['created_at'] as String)
+                : null,
+            onRatePressed: _canRate(b) ? _onRate : null,
+          ),
           const SizedBox(height: 16),
         ],
 
