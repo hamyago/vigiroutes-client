@@ -27,33 +27,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _current = 0;
 
   final _pages = const [
+    // Slide 1 — Bienvenue
     _Page(
-      emoji: '🚗',
-      title: 'Panne ? On arrive !',
+      emoji: '🌐',
+      title: 'VigiRoutes',
       subtitle:
-          'Trouvez un professionnel de dépannage qualifié en moins de 3 minutes, où que vous soyez en Côte d\'Ivoire.',
+          'Votre partenaire pour la route.\n\nContrôle technique, dépannage, assistance — tout en un seul endroit.',
       color: AppColors.primary,
     ),
+    // Slide 2 — Contrôle technique (PRIORITÉ)
     _Page(
-      emoji: '📍',
-      title: 'Géolocalisation précise',
+      emoji: '🔧',
+      title: 'Contrôle technique simplifié',
       subtitle:
-          'Visualisez les prestataires disponibles autour de vous sur la carte et suivez leur arrivée en temps réel.',
+          'Prenez rendez-vous en ligne, un transporteur agréé s\'occupe de tout.\n\nSuivez votre véhicule en temps réel, de la prise en charge à la livraison.',
       color: AppColors.accent,
     ),
+    // Slide 3 — Dépannage (secondaire)
     _Page(
-      emoji: '💸',
-      title: 'Paiement simplifié',
+      emoji: '🚛',
+      title: 'Dépannage à tout moment',
       subtitle:
-          'Payez par Orange Money, Wave ou carte bancaire. Le tarif est affiché avant confirmation — aucune surprise.',
+          'Un réseau de dépanneurs et mécaniciens vérifiés à votre service, 24h/24 et 7j/7, partout en Côte d\'Ivoire.',
       color: AppColors.success,
-    ),
-    _Page(
-      emoji: '⭐',
-      title: 'Prestataires certifiés',
-      subtitle:
-          'Chaque professionnel est vérifié par Oyop MT. Consultez les avis et notations avant de faire votre choix.',
-      color: Color(0xFF9F7AEA),
     ),
   ];
 
