@@ -22,6 +22,7 @@
 
 import 'api_service.dart';
 import '../models/vehicle_model.dart';
+import '../models/vehicle_stats_model.dart';
 
 class CtService {
   CtService._();
@@ -231,6 +232,21 @@ class CtService {
       return (res.data['data'] as Map<String, dynamic>?) ?? {};
     } catch (_) {
       return {};
+    }
+  }
+
+  /// Récupère les statistiques d'interventions pour un véhicule (S18).
+  ///
+  /// Endpoint backend : GET /user/vehicles/{id}/stats
+  /// Retourne null en cas d'erreur.
+  Future<VehicleStatsModel?> getVehicleStats(String vehicleId) async {
+    try {
+      final res = await _api.get('/user/vehicles/$vehicleId/stats');
+      final data = res.data['data'] as Map<String, dynamic>?;
+      if (data == null) return null;
+      return VehicleStatsModel.fromJson(data);
+    } catch (_) {
+      return null;
     }
   }
 
