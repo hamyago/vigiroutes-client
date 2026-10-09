@@ -149,11 +149,15 @@ class TransportTimeline extends StatelessWidget {
         icon: Icons.business_rounded,
       ),
       // ── Contrôle technique (S17.3) ────────────────────────────────
-      _TimelineStep(
-        label: 'Arrivé au centre (CT)',
-        time: booking.arrivedAt,
-        icon: Icons.place_rounded,
-      ),
+      // Arrivé au centre CT : affiché sauf si obsolète
+      // (arrived_at null mais l'inspection a déjà démarré)
+      if (booking.arrivedAt != null ||
+          booking.inspectionStartedAt == null)
+        _TimelineStep(
+          label: 'Arrivé au centre (CT)',
+          time: booking.arrivedAt,
+          icon: Icons.place_rounded,
+        ),
       _TimelineStep(
         label: 'Inspection démarrée',
         time: booking.inspectionStartedAt,
