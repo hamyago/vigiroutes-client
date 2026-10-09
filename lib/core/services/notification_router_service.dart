@@ -128,6 +128,14 @@ class NotificationRouterService {
                 label: 'Réserver',
                 onPressed: () => _navigateToCT(message.data)));
 
+      case 'vehicle_expiry_reminder':
+        // Rappel d'échéance d'assurance (S18)
+        _showSnackbar(body,
+            isWarning: true,
+            action: SnackBarAction(
+                label: 'Voir',
+                onPressed: () => _navigateToVehicle(message.data)));
+
       case 'booking_confirmed':
       case 'vehicle_at_center':
       case 'inspection_ongoing':
@@ -186,6 +194,9 @@ class NotificationRouterService {
       case 'vt_result':
       case 'transport_update':
         _navigateToCT(message.data);
+
+      case 'vehicle_expiry_reminder':
+        _navigateToVehicle(message.data);
 
       case 'ct_quote_received':
         final qrId = message.data['quote_request_id'] as String?;
@@ -371,6 +382,7 @@ class NotificationRouterService {
         'vt_reminder_3d'      => '🔔 CT dans 3 jours',
         'vt_reminder_1d'      => '🚨 CT demain !',
         'vt_expired'          => '🚫 CT expiré',
+        'vehicle_expiry_reminder' => '⚠️ Assurance bientôt expirée',
         'ct_quote_received'   => '💰 Devis CT disponible',
 
         // ── Crédit bas (app Pro) ──
@@ -408,6 +420,7 @@ class NotificationRouterService {
       'vt_reminder_3d'  => '$immat — contrôle technique dans 3 jours ! Prenez rendez-vous.',
       'vt_reminder_1d'  => '$immat — contrôle technique DEMAIN ! Réservez maintenant.',
       'vt_expired'      => '$immat — contrôle technique expiré. Régularisez rapidement.',
+      'vehicle_expiry_reminder' => '$immat — votre assurance expire bientôt. Vérifiez sa date de validité.',
 
       // ── Crédit bas ──
       'credit_low'      => 'Rechargez pour continuer à recevoir des demandes.',

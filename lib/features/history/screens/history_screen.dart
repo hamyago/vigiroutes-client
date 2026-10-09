@@ -7,6 +7,7 @@ import '../../../core/services/api_service.dart';
 import '../../../core/utils/price_calculator.dart';
 import '../../../shared/utils/date_filter_utils.dart';
 import '../../../shared/widgets/date_range_filter.dart';
+import '../widgets/vehicle_stats_card.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -37,30 +38,39 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _loadAll();
   }
 
-  /// Charge les véhicules + interventions en parallèle.
+  /// Charge les véhicules + interventions (S18 : auto-sélection si 1 seul).
   Future<void> _loadAll() async {
     setState(() { _loading = true; _error = null; });
     try {
-      // Charger véhicules et interventions en parallèle
-      final results = await Future.wait([
-        ApiService.instance.getVehicles(),
-        ApiService.instance.getInterventions(vehicleId: _selectedVehicleId),
-      ]);
+      // 1) Charger les véhicules D'ABORD
+      final rawVehicles = (await ApiService.instance.getVehicles()) as List? ?? [];
 
-      final rawVehicles = (results[0] as List?) ?? [];
-      final rawInterventions = (results[1] as List?) ?? [];
+      final vehicles = rawVehicles
+          .map((e) {
+            try { return VehicleModel.fromJson(e as Map<String, dynamic>); }
+            catch (_) { return null; }
+          })
+          .whereType<VehicleModel>()
+          .toList();
+
+      // 2) Auto-sélection si l'utilisateur a exactement 1 véhicule (S18)
+      String? effectiveVehicleId = _selectedVehicleId;
+      if (vehicles.length == 1 && _selectedVehicleId == null) {
+        effectiveVehicleId = vehicles.first.id;
+      }
+
+      // 3) Charger les interventions avec le filtre effectif
+      final rawInterventions =
+          (await ApiService.instance.getInterventions(
+        vehicleId: effectiveVehicleId,
+      )) as List? ??
+              [];
 
       if (!mounted) return;
 
       setState(() {
-        _vehicles = rawVehicles
-            .map((e) {
-              try { return VehicleModel.fromJson(e as Map<String, dynamic>); }
-              catch (_) { return null; }
-            })
-            .whereType<VehicleModel>()
-            .toList();
-
+        _vehicles = vehicles;
+        _selectedVehicleId = effectiveVehicleId;
         _interventions = rawInterventions
             .map((e) {
               try { return InterventionModel.fromJson(e as Map<String, dynamic>); }
@@ -68,7 +78,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
             })
             .whereType<InterventionModel>()
             .toList();
-
         _loading = false;
       });
     } catch (e) {
@@ -137,6 +146,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
               selected: _selectedFilter,
               onChanged: (f) => setState(() => _selectedFilter = f),
             ),
+            // Stats du véhicule sélectionné (S18)
+            if (_selectedVehicleId != null)
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 8,
+                ),
+                child: VehicleStatsCard(vehicleId: _selectedVehicleId!),
+              ),
             Expanded(child: _buildBody()),
           ],
         ),
