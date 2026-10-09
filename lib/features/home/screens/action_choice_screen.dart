@@ -15,10 +15,9 @@ class ActionChoiceScreen extends StatelessWidget {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _ChoiceCard(
                 color: const Color(0xFFFF6B35),
