@@ -15,8 +15,8 @@
 //   - vehicle_at_center    → /ct/booking?...
 //   - vt_result            → /ct/booking?...
 //   - transport_update     → /ct/booking?...
-//   - vt_reminder_*        → /ct/vehicles?vehicle_id=...
-//   - vt_expired           → /ct/vehicles?vehicle_id=...
+//   - vt_reminder_*        → /user/vehicles?vehicle_id=...
+//   - vt_expired           → /user/vehicles?vehicle_id=...
 //   - ct_quote_received    → /ct/quote/:id
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -183,9 +183,9 @@ class NotificationRouterService {
       case 'vt_expired':
         final vehicleId = message.data['vehicle_id'] as String?;
         if (vehicleId != null) {
-          _navigate('/ct/vehicles', extra: {'vehicle_id': vehicleId});
+          _navigate('/user/vehicles?vehicle_id=$vehicleId');
         } else {
-          _navigateToCT(message.data);
+          _navigate('/user/vehicles');
         }
 
       case 'booking_confirmed':
@@ -280,9 +280,9 @@ class NotificationRouterService {
   void _navigateToVehicle(Map<String, dynamic> data) {
     final vehicleId = data['vehicle_id'] as String?;
     if (vehicleId != null) {
-      _navigate('/ct/vehicles?vehicle_id=$vehicleId');
+      _navigate('/user/vehicles?vehicle_id=$vehicleId');
     } else {
-      _navigate('/ct/booking');
+      _navigate('/user/vehicles');
     }
   }
 
