@@ -29,12 +29,24 @@ class TransportTimeline extends StatelessWidget {
   /// Callback pour l'action "Noter le transporteur".
   final VoidCallback? onRatePressed;
 
+  /// Timestamp de la notation du centre (S22.3) — null si pas encore noté.
+  final DateTime? centerRatingCreatedAt;
+
+  /// Note du centre (1-5), null si pas encore noté (S22.3).
+  final int? centerRating;
+
+  /// Callback pour l'action "Noter le centre" (S22.3).
+  final VoidCallback? onRateCenterPressed;
+
   const TransportTimeline({
     super.key,
     required this.booking,
     this.ratingCreatedAt,
     this.rating,
     this.onRatePressed,
+    this.centerRatingCreatedAt,
+    this.centerRating,
+    this.onRateCenterPressed,
   });
 
   @override
@@ -193,6 +205,15 @@ class TransportTimeline extends StatelessWidget {
         rating: rating,
         isAction: rating == null && onRatePressed != null,
         onActionTap: onRatePressed,
+      ),
+      // ── Notation centre CT (S22.3) ────────────────────────────────
+      _TimelineStep(
+        label: centerRating != null ? 'Centre noté' : 'Noter le centre',
+        time: centerRatingCreatedAt,
+        icon: Icons.verified_rounded,
+        rating: centerRating,
+        isAction: centerRating == null && onRateCenterPressed != null,
+        onActionTap: onRateCenterPressed,
       ),
     ];
 

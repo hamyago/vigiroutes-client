@@ -10,6 +10,7 @@ import '../widgets/transport_timeline.dart';
 import '../widgets/ct_contact_section.dart';
 import '../widgets/vehicle_photos_section.dart';
 import '../widgets/rate_transporter_sheet.dart';
+import '../widgets/rate_center_sheet.dart';
 
 class CtBookingDetailScreen extends StatefulWidget {
   final String bookingId;
@@ -29,6 +30,10 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
   /// Notation du transporteur (S17.4) — null si pas encore noté.
   Map<String, dynamic>? _rating;
   bool _submittingRating = false;
+
+  /// Notation du centre CT (S22.3) — null si pas encore noté.
+  Map<String, dynamic>? _centerRating;
+  bool _submittingCenterRating = false;
 
   /// ⏱️ Timer de rafraîchissement automatique (S13.6.2).
   /// Recharge le booking toutes les 15s tant qu'il n'est pas terminé.
@@ -85,16 +90,18 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      // Charger booking + rating en parallèle (S17.4)
+      // Charger booking + ratings en parallèle (S17.4 + S22.3)
       final results = await Future.wait([
         CtService.instance.getBooking(widget.bookingId),
         CtService.instance.getTransporterRating(widget.bookingId),
+        CtService.instance.getCenterRating(widget.bookingId),
       ]);
 
       if (!mounted) return;
       setState(() {
         _booking = results[0] as CtBookingModel;
         _rating = results[1] as Map<String, dynamic>?;
+        _centerRating = results[2] as Map<String, dynamic>?;
         _loading = false;
       });
     } catch (e) {
@@ -153,6 +160,60 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
   }
 
   /// Regénère le QR code du booking et rafraîchit l'écran.
+
+  /// Ouvre le sheet de notation du centre CT (S22.3).
+  Future<void> _onRateCenter() async {
+    final b = _booking;
+    if (b == null || _submittingCenterRating) return;
+
+    final result = await RateCenterSheet.show(
+      context: context,
+      centerName: b.center.name,
+      initialRating: (_centerRating?['rating'] as num?)?.toInt(),
+      initialComment: _centerRating?['comment'] as String?,
+    );
+
+    if (result == null || !mounted) return;
+
+    setState(() => _submittingCenterRating = true);
+
+    final ok = await CtService.instance.rateCenter(
+      bookingId: widget.bookingId,
+      rating: result.rating,
+      comment: result.comment,
+    );
+
+    if (!mounted) return;
+    setState(() => _submittingCenterRating = false);
+
+    if (ok) {
+      final fresh = await CtService.instance
+          .getCenterRating(widget.bookingId);
+      if (!mounted) return;
+      setState(() => _centerRating = fresh);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Merci pour votre avis sur le centre !'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossible d\'enregistrer votre avis. Réessayez.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  /// Vrai si l'utilisateur peut noter le centre (S22.3).
+  bool _canRateCenter(CtBookingModel b) {
+    if (b.isCompleted != true) return false;
+    if (_centerRating != null) return false;
+    return true;
+  }
   Future<void> _onRegenerateQr() async {
     if (_isRegeneratingQr) return;
     setState(() => _isRegeneratingQr = true);
@@ -409,6 +470,12 @@ class _CtBookingDetailScreenState extends State<CtBookingDetailScreen> {
                 ? DateTime.tryParse(_rating!['created_at'] as String)
                 : null,
             onRatePressed: _canRate(b) ? _onRate : null,
+            centerRating: (_centerRating?['rating'] as num?)?.toInt(),
+            centerRatingCreatedAt: _centerRating?['created_at'] != null
+                ? DateTime.tryParse(_centerRating!['created_at'] as String)
+                : null,
+            onRateCenterPressed:
+                _canRateCenter(b) ? _onRateCenter : null,
           ),
           const SizedBox(height: 16),
         ],
