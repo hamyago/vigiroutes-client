@@ -23,6 +23,7 @@
 import 'api_service.dart';
 import '../models/vehicle_model.dart';
 import '../models/vehicle_stats_model.dart';
+import '../models/ct_center_marketplace_model.dart';
 
 class CtService {
   CtService._();
@@ -256,6 +257,59 @@ class CtService {
   Future<Map<String, dynamic>?> getTransporterRating(String bookingId) async {
     try {
       final res = await _api.get('/ct/transport/missions/$bookingId/rate');
+      return res.data['data'] as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Marketplace des centres CT (S22.2).
+  ///
+  /// [lat], [lng] : position de l'utilisateur (optionnel)
+  /// [sort] : 'distance' | 'rating' | 'price'
+  Future<List<CtCenterMarketplaceModel>> getCentersMarketplace({
+    double? lat,
+    double? lng,
+    String sort = 'distance',
+  }) async {
+    try {
+      final res = await _api.get('/ct/centers/marketplace', params: {
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
+        'sort': sort,
+      });
+      final list = (res.data['data'] as List?) ?? [];
+      return list
+          .map((e) => CtCenterMarketplaceModel.fromJson(
+                (e as Map).cast<String, dynamic>(),
+              ))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Note un centre CT après un contrôle terminé (S22.2).
+  Future<bool> rateCenter({
+    required String bookingId,
+    required int rating,
+    String? comment,
+  }) async {
+    try {
+      await _api.post('/ct/bookings/$bookingId/rate-center', data: {
+        'rating': rating,
+        if (comment != null && comment.isNotEmpty) 'comment': comment,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Lit la notation du centre pour un booking (S22.2).
+  Future<Map<String, dynamic>?> getCenterRating(String bookingId) async {
+    try {
+      final res = await _api.get('/ct/bookings/$bookingId/rate-center');
       return res.data['data'] as Map<String, dynamic>?;
     } catch (_) {
       return null;

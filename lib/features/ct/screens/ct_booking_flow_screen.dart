@@ -7,8 +7,10 @@ import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../controllers/ct_booking_controller.dart';
+import 'ct_centers_marketplace_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/ct_quote_model.dart';
+import '../../../core/models/ct_center_marketplace_model.dart';
 import '../../../core/services/location_service.dart';
 
 class CtBookingFlowScreen extends StatefulWidget {
@@ -254,6 +256,37 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
     if (picked != null) ctrl.selectDate(picked);
   }
 
+  /// Ouvre le marketplace enrichi (S22.2) et applique le centre choisi.
+  Future<void> _openMarketplace(CtBookingController ctrl) async {
+    final selected = await Navigator.of(context).push<CtCenterMarketplaceModel>(
+      MaterialPageRoute(
+        builder: (_) => CtCentersMarketplaceScreen(
+          selectedCenterId: ctrl.selectedCenter?.id,
+        ),
+      ),
+    );
+
+    if (selected == null || !mounted) return;
+
+    final match = ctrl.availableCenters
+        .where((c) => c.id == selected.id)
+        .firstOrNull;
+
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Ce centre n\'est pas disponible pour cette date. '
+            'Choisissez une autre date.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+    ctrl.selectCenter(match);
+  }
+
   @override
   Widget build(BuildContext context) {
     final ctrl = widget.ctrl;
@@ -296,6 +329,34 @@ class _Step2CenterAndSlotState extends State<_Step2CenterAndSlot> {
           ),
         ),
         Divider(color: AppColors.divider, height: 1),
+
+        // S22.2 — Bouton marketplace
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: OutlinedButton.icon(
+              onPressed: () => _openMarketplace(ctrl),
+              icon: const Icon(Icons.explore_outlined, size: 18),
+              label: const Text(
+                'Explorer le marketplace',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ),
+
         if (ctrl.isLoading)
           const Expanded(
             child: Center(child: CircularProgressIndicator()),
